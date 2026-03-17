@@ -10,9 +10,6 @@ import java.io.IOException;
 
 public class ModConfig {
 
-        // -----------------------------------------------------------------------
-        // Singleton Setup & File Management
-        // -----------------------------------------------------------------------
         private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
         private static File configFile;
         private static ModConfig instance;
@@ -24,9 +21,6 @@ public class ModConfig {
                 return instance;
         }
 
-        // -----------------------------------------------------------------------
-        // Enums
-        // -----------------------------------------------------------------------
         public enum OverlayPosition {
                 TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
         }
@@ -35,17 +29,12 @@ public class ModConfig {
                 CLASSIC, MODERN
         }
 
-        // -----------------------------------------------------------------------
-        // Configuration Categories (Structured for GUI Tabs)
-        // -----------------------------------------------------------------------
-
         public General general = new General();
 
         public static class General {
                 public boolean enabled = true;
                 public boolean enableKeybindings = true;
                 public int updateIntervalMs = 250;
-
                 public int configVersion = 4;
         }
 
@@ -55,10 +44,8 @@ public class ModConfig {
                 public boolean showFps = true;
                 public boolean showAverageFps = true;
                 public int averageWindowMs = 10000;
-
                 public boolean showMemory = true;
                 public boolean showMemoryPercentage = true;
-
                 public boolean showPing = true;
         }
 
@@ -67,28 +54,16 @@ public class ModConfig {
         public static class Appearance {
                 public OverlayPosition position = OverlayPosition.TOP_LEFT;
                 public OverlayStyle overlayStyle = OverlayStyle.MODERN;
-
-                // Scaling & Spacing
-                public float scale = 1.0f; // Smoother to scale rendering than changing raw font size
+                public float scale = 1.0f;
                 public int padding = 5;
                 public boolean compactMode = false;
-
-                // Colors & Background
                 public boolean showBackground = true;
                 public int backgroundOpacity = 180;
-                public String textColorHex = "#FFFFFF"; // Default white
+                public String textColorHex = "#FFFFFF";
                 public boolean useTextShadow = true;
-                public boolean useAdaptiveColors = true; // e.g., Red when FPS drops
+                public boolean useAdaptiveColors = true;
         }
 
-        // -----------------------------------------------------------------------
-        // Validation & Reset Methods
-        // -----------------------------------------------------------------------
-
-        /**
-         * Validates and corrects configuration values to ensure they don't break the
-         * UI.
-         */
         public void validate() {
                 general.updateIntervalMs = Math.max(16, Math.min(1000, general.updateIntervalMs));
                 hud.averageWindowMs = Math.max(500, Math.min(30000, hud.averageWindowMs));
@@ -113,10 +88,6 @@ public class ModConfig {
                 this.appearance = new Appearance();
                 validate();
         }
-
-        // -----------------------------------------------------------------------
-        // I/O Methods (Save/Load)
-        // -----------------------------------------------------------------------
 
         public static void init(File file) {
                 configFile = file;

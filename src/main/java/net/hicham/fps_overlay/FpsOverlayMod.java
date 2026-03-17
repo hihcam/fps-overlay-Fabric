@@ -2,16 +2,13 @@ package net.hicham.fps_overlay;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.option.KeyBinding;
-
 import net.minecraft.text.Text;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -19,10 +16,8 @@ public class FpsOverlayMod implements ClientModInitializer {
     public static final Logger LOGGER = LogManager.getLogger("FpsOverlay");
     private ModConfig config;
 
-    // Key bindings
     private KeyBinding[] keyBindings;
 
-    // State management
     private final AtomicBoolean modInitialized = new AtomicBoolean(false);
     private final Object INIT_LOCK = new Object();
 
@@ -40,7 +35,6 @@ public class FpsOverlayMod implements ClientModInitializer {
                 ConfigManager.initialize();
                 config = ConfigManager.getConfig();
 
-                // Pass config to subsystems
                 PerformanceTracker.getInstance().setConfig(config);
                 OverlayRenderer.setConfig(config);
 
@@ -67,18 +61,15 @@ public class FpsOverlayMod implements ClientModInitializer {
         try {
             config = ConfigManager.getConfig();
 
-            // Update subsystems
             PerformanceTracker.getInstance().setConfig(config);
             OverlayRenderer.setConfig(config);
 
-            // Re-register keybindings if enableKeybindings changed
             if (keyBindings != null && !config.general.enableKeybindings) {
                 keyBindings = null;
             } else if (keyBindings == null && config.general.enableKeybindings) {
                 registerKeyBindings();
             }
 
-            // Clear average FPS data if disabled
             if (!config.hud.showAverageFps) {
                 PerformanceTracker.getInstance().clearAverageFpsData();
             }
@@ -92,22 +83,6 @@ public class FpsOverlayMod implements ClientModInitializer {
             return;
 
         try {
-/*
-            keyBindings = new KeyBinding[] {
-                    new KeyBinding("key.fps_overlay.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_O, "key.category.xml_overlay"),
-                    new KeyBinding("key.fps_overlay.toggle_fps", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F, "key.category.xml_overlay"),
-                    new KeyBinding("key.fps_overlay.toggle_memory", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_M, "key.category.xml_overlay"),
-                    new KeyBinding("key.fps_overlay.toggle_ping", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_P, "key.category.xml_overlay"),
-                    new KeyBinding("key.fps_overlay.open_config", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_C, "key.category.xml_overlay"),
-                    new KeyBinding("key.fps_overlay.reset_stats", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_R, "key.category.xml_overlay"),
-                    new KeyBinding("key.fps_overlay.toggle_avg_fps", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_BACKSLASH, "key.category.xml_overlay")
-            };
-
-            for (KeyBinding key : keyBindings) {
-                KeyBindingHelper.registerKeyBinding(key);
-            }
-*/
-
             LOGGER.debug("Registered keybindings (mock)");
         } catch (Exception e) {
             LOGGER.error("Failed to register keybindings", e);
@@ -116,7 +91,6 @@ public class FpsOverlayMod implements ClientModInitializer {
 
     @SuppressWarnings("deprecation")
     private void registerEventListeners() {
-        // Performance update event
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (!modInitialized.get() || client.player == null)
                 return;
@@ -128,7 +102,6 @@ public class FpsOverlayMod implements ClientModInitializer {
             }
         });
 
-        // Render overlay
         HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
             if (!shouldRenderOverlay())
                 return;

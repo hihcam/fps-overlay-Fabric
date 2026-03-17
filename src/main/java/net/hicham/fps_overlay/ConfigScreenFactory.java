@@ -9,13 +9,11 @@ import net.minecraft.text.Text;
 import static net.hicham.fps_overlay.ModConfig.*;
 
 public class ConfigScreenFactory {
-        // Translation key constants
         private static final String TITLE_CONFIG = "title.fps_overlay.config";
 
         private static final String CATEGORY_HUD = "category.fps_overlay.hud";
         private static final String CATEGORY_APPEARANCE = "category.fps_overlay.appearance";
 
-        // Tooltip keys
         private static final String TOOLTIP_ENABLED = "tooltip.fps_overlay.enabled";
         private static final String TOOLTIP_UPDATE_INTERVAL = "tooltip.fps_overlay.updateInterval";
 
@@ -47,7 +45,6 @@ public class ConfigScreenFactory {
                 ConfigEntryBuilder entryBuilder = builder.entryBuilder();
                 ModConfig config = ConfigManager.getConfig();
 
-                // ==================== HUD MODULES ====================
                 ConfigCategory hud = builder.getOrCreateCategory(Text.translatable(CATEGORY_HUD));
 
                 hud.addEntry(entryBuilder
@@ -94,9 +91,6 @@ public class ConfigScreenFactory {
                                 .setSaveConsumer(value -> config.hud.showPing = value)
                                 .build());
 
-
-
-                // ==================== SETTINGS & APPEARANCE ====================
                 ConfigCategory appearance = builder.getOrCreateCategory(Text.translatable(CATEGORY_APPEARANCE));
 
                 appearance.addEntry(entryBuilder.startEnumSelector(
@@ -116,8 +110,6 @@ public class ConfigScreenFactory {
                                 .setTooltip(Text.translatable(TOOLTIP_OVERLAY_STYLE))
                                 .setSaveConsumer(value -> config.appearance.overlayStyle = value)
                                 .build());
-
-
 
                 appearance.addEntry(entryBuilder
                                 .startBooleanToggle(Text.translatable("option.fps_overlay.showMemoryPercentage"),

@@ -14,7 +14,6 @@ public class ConfigManager {
     private static final Logger LOGGER = LogManager.getLogger("fps_overlay/ConfigManager");
     private static final AtomicBoolean initialized = new AtomicBoolean(false);
 
-    // Config change event
     @SuppressWarnings("null")
     public static final Event<ConfigChangedCallback> CONFIG_CHANGED = EventFactory.createArrayBacked(
             ConfigChangedCallback.class,
@@ -26,8 +25,7 @@ public class ConfigManager {
                         LOGGER.error("Error in config change listener", e);
                     }
                 }
-            }
-    );
+            });
 
     @FunctionalInterface
     public interface ConfigChangedCallback {
@@ -42,7 +40,7 @@ public class ConfigManager {
         try {
             Path configDir = Paths.get("config", "fps_overlay");
             File configFile = configDir.resolve("config.json").toFile();
-            
+
             if (!configDir.toFile().exists()) {
                 configDir.toFile().mkdirs();
             }

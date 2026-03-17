@@ -13,10 +13,8 @@ import java.util.List;
 import java.util.Map;
 
 public class OverlayRenderer {
-    // Config reference
     private static ModConfig config;
 
-    // Constants
     private static final int COLOR_EXCELLENT = 0xFF00FF00;
     private static final int COLOR_GOOD = 0xFFFFFF00;
     private static final int COLOR_WARNING = 0xFFFFA500;
@@ -24,13 +22,11 @@ public class OverlayRenderer {
     private static final int COLOR_NEUTRAL = 0xFFFFFFFF;
     private static final int COLOR_BACKGROUND = 0x80000000;
 
-    // Average FPS specific colors
     private static final int COLOR_AVG_EXCELLENT = 0xFF00FFFF;
     private static final int COLOR_AVG_GOOD = 0xFF00FF00;
     private static final int COLOR_AVG_WARNING = 0xFFFFFF00;
     private static final int COLOR_AVG_CRITICAL = 0xFFFF0000;
 
-    // Formatters - thread-safe reuse
     @SuppressWarnings("null")
     private static final ThreadLocal<DecimalFormat> MEMORY_FORMAT = ThreadLocal
             .withInitial(() -> new DecimalFormat("0.0"));
@@ -41,11 +37,9 @@ public class OverlayRenderer {
     private static final ThreadLocal<DecimalFormat> AVG_FPS_FORMAT = ThreadLocal
             .withInitial(() -> new DecimalFormat("0.0"));
 
-    // Text cache
     private static final Map<String, Text> TEXT_CACHE = new HashMap<>();
     private static boolean textCacheInitialized = false;
 
-    // Reusable line objects to avoid allocation
     private static final List<OverlayLine> REUSABLE_LINES = new ArrayList<>(6);
 
     static {
@@ -120,8 +114,6 @@ public class OverlayRenderer {
             activeLines.add(line);
         }
 
-
-
         return activeLines;
     }
 
@@ -169,8 +161,6 @@ public class OverlayRenderer {
             line.addPart(Text.literal(PERCENT_FORMAT.get().format(usagePercent) + "%"), memoryColor);
             line.addSpacer(Text.literal(")"));
         }
-
-
     }
 
     private static void updatePingLine(OverlayLine line, PerformanceTracker tracker) {
@@ -182,15 +172,12 @@ public class OverlayRenderer {
         line.addPart(TEXT_CACHE.get("ms"), getTextColor());
     }
 
-
-
     private static void renderLines(DrawContext ctx, MinecraftClient client, List<OverlayLine> lines) {
         TextRenderer renderer = client.textRenderer;
         int verticalPadding = config.appearance.compactMode ? 2 : 4;
         int lineHeight = renderer.fontHeight + verticalPadding;
         int maxWidth = calculateMaxWidth(renderer, lines);
-        int totalHeight = (lines.size() * lineHeight) - (config.appearance.compactMode ? 0 : 2); // Adjust slightly for
-                                                                                                 // better fit
+        int totalHeight = (lines.size() * lineHeight) - (config.appearance.compactMode ? 0 : 2);
 
         if (config.appearance.overlayStyle == ModConfig.OverlayStyle.MODERN) {
             maxWidth += 8;
@@ -204,10 +191,9 @@ public class OverlayRenderer {
         int x = position[0];
         int y = position[1];
 
-        // Apply scaling
         float scale = config.appearance.scale;
         Object matricesRaw = ctx.getMatrices();
-        
+
         if (matricesRaw instanceof MatrixStack matrices) {
             matrices.push();
             if (scale != 1.0f) {
@@ -222,7 +208,6 @@ public class OverlayRenderer {
 
             matrices.pop();
         } else {
-            // Fallback for unexpected matrix types
             drawBackground(ctx, x, y, maxWidth, totalHeight);
             drawTextLines(ctx, renderer, lines, x, y, lineHeight, maxWidth);
         }
@@ -245,7 +230,7 @@ public class OverlayRenderer {
 
             ctx.fill(x - padding, y - padding,
                     x - padding + 3, y + height + padding,
-                    0xFFFFA500); // Orange accent
+                    0xFFFFA500);
 
             ctx.fill(x - padding + 3, y - padding,
                     x + width + padding, y - padding + 1,
@@ -296,12 +281,8 @@ public class OverlayRenderer {
                     }
                 }
             }
-
-
         }
     }
-
-
 
     private static int calculateMaxWidth(TextRenderer renderer, List<OverlayLine> lines) {
         int maxWidth = 0;
@@ -369,7 +350,6 @@ public class OverlayRenderer {
         }
     }
 
-    // Helpers used for coloring
     private static int getColorForMemory(double usagePercent) {
         if (!config.appearance.useAdaptiveColors)
             return getTextColor();
@@ -406,8 +386,6 @@ public class OverlayRenderer {
         return COLOR_CRITICAL;
     }
 
-
-
     private static int getColorForAverageFps(int fps) {
         if (!config.appearance.useAdaptiveColors)
             return getTextColor();
@@ -420,7 +398,6 @@ public class OverlayRenderer {
         return COLOR_AVG_CRITICAL;
     }
 
-    // Inner classes
     private static class OverlayLine {
         final List<TextPart> parts = new ArrayList<>(5);
         final List<Text> spacers = new ArrayList<>(5);
