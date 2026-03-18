@@ -25,7 +25,8 @@ public class ConfigManager {
                         LOGGER.error("Error in config change listener", e);
                     }
                 }
-            });
+            }
+    );
 
     @FunctionalInterface
     public interface ConfigChangedCallback {
@@ -40,7 +41,7 @@ public class ConfigManager {
         try {
             Path configDir = Paths.get("config", "fps_overlay");
             File configFile = configDir.resolve("config.json").toFile();
-
+            
             if (!configDir.toFile().exists()) {
                 configDir.toFile().mkdirs();
             }

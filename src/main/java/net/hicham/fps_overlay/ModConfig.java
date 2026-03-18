@@ -22,11 +22,11 @@ public class ModConfig {
         }
 
         public enum OverlayPosition {
-                TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
+                TOP_LEFT, TOP_RIGHT, TOP_CENTER, BOTTOM_LEFT, BOTTOM_RIGHT
         }
 
         public enum OverlayStyle {
-                CLASSIC, MODERN
+                DEFAULT, NAVBAR
         }
 
         public General general = new General();
@@ -35,6 +35,7 @@ public class ModConfig {
                 public boolean enabled = true;
                 public boolean enableKeybindings = true;
                 public int updateIntervalMs = 250;
+
                 public int configVersion = 4;
         }
 
@@ -43,43 +44,33 @@ public class ModConfig {
         public static class HUD {
                 public boolean showFps = true;
                 public boolean showAverageFps = true;
-                public int averageWindowMs = 10000;
+
                 public boolean showMemory = true;
-                public boolean showMemoryPercentage = true;
+
                 public boolean showPing = true;
         }
 
         public Appearance appearance = new Appearance();
 
         public static class Appearance {
-                public OverlayPosition position = OverlayPosition.TOP_LEFT;
-                public OverlayStyle overlayStyle = OverlayStyle.MODERN;
-                public float scale = 1.0f;
-                public int padding = 5;
-                public boolean compactMode = false;
+                public OverlayPosition position = OverlayPosition.TOP_CENTER;
+                public OverlayStyle overlayStyle = OverlayStyle.NAVBAR;
+
+                // Colors & Background
                 public boolean showBackground = true;
                 public int backgroundOpacity = 180;
-                public String textColorHex = "#FFFFFF";
-                public boolean useTextShadow = true;
-                public boolean useAdaptiveColors = true;
+
+                public float hudScale = 0.65f;
         }
 
         public void validate() {
                 general.updateIntervalMs = Math.max(16, Math.min(1000, general.updateIntervalMs));
-                hud.averageWindowMs = Math.max(500, Math.min(30000, hud.averageWindowMs));
 
                 appearance.backgroundOpacity = Math.max(0, Math.min(255, appearance.backgroundOpacity));
-                appearance.padding = Math.max(0, Math.min(50, appearance.padding));
-                appearance.scale = Math.max(0.5f, Math.min(3.0f, appearance.scale));
+                appearance.hudScale = Math.max(0.2f, Math.min(2.0f, appearance.hudScale));
 
                 if (appearance.position == null)
-                        appearance.position = OverlayPosition.TOP_LEFT;
-                if (appearance.overlayStyle == null)
-                        appearance.overlayStyle = OverlayStyle.MODERN;
-
-                if (!appearance.textColorHex.matches("^#[0-9A-Fa-f]{6}$")) {
-                        appearance.textColorHex = "#FFFFFF";
-                }
+                        appearance.position = OverlayPosition.TOP_CENTER;
         }
 
         public void resetToDefaults() {

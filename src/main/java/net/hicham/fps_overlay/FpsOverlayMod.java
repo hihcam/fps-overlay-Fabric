@@ -2,13 +2,16 @@ package net.hicham.fps_overlay;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.option.KeyBinding;
+
 import net.minecraft.text.Text;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -18,6 +21,7 @@ public class FpsOverlayMod implements ClientModInitializer {
 
     private KeyBinding[] keyBindings;
 
+    // State management
     private final AtomicBoolean modInitialized = new AtomicBoolean(false);
     private final Object INIT_LOCK = new Object();
 
@@ -64,6 +68,7 @@ public class FpsOverlayMod implements ClientModInitializer {
             PerformanceTracker.getInstance().setConfig(config);
             OverlayRenderer.setConfig(config);
 
+            // Re-register keybindings if enableKeybindings changed
             if (keyBindings != null && !config.general.enableKeybindings) {
                 keyBindings = null;
             } else if (keyBindings == null && config.general.enableKeybindings) {
@@ -79,14 +84,7 @@ public class FpsOverlayMod implements ClientModInitializer {
     }
 
     private void registerKeyBindings() {
-        if (!config.general.enableKeybindings)
-            return;
-
-        try {
-            LOGGER.debug("Registered keybindings (mock)");
-        } catch (Exception e) {
-            LOGGER.error("Failed to register keybindings", e);
-        }
+        LOGGER.debug("Keybindings registration skipped (not implemented)");
     }
 
     @SuppressWarnings("deprecation")
@@ -196,8 +194,9 @@ public class FpsOverlayMod implements ClientModInitializer {
     }
 
     private void resetStatistics(MinecraftClient client) {
+        PerformanceTracker.getInstance().clearAverageFpsData();
         if (client != null && client.player != null) {
-            client.player.sendMessage(Text.literal("§7[§6FpsOverlay§7] §fDisplay refreshed"), false);
+            client.player.sendMessage(Text.literal("§7[§6FpsOverlay§7] §fStatistics reset"), false);
         }
     }
 

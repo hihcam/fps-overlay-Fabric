@@ -5,6 +5,7 @@ import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
+import org.joml.Matrix3x2fStack;
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
@@ -15,17 +16,12 @@ import java.util.Map;
 public class OverlayRenderer {
     private static ModConfig config;
 
-    private static final int COLOR_EXCELLENT = 0xFF00FF00;
-    private static final int COLOR_GOOD = 0xFFFFFF00;
-    private static final int COLOR_WARNING = 0xFFFFA500;
-    private static final int COLOR_CRITICAL = 0xFFFF0000;
-    private static final int COLOR_NEUTRAL = 0xFFFFFFFF;
-    private static final int COLOR_BACKGROUND = 0x80000000;
-
-    private static final int COLOR_AVG_EXCELLENT = 0xFF00FFFF;
-    private static final int COLOR_AVG_GOOD = 0xFF00FF00;
-    private static final int COLOR_AVG_WARNING = 0xFFFFFF00;
-    private static final int COLOR_AVG_CRITICAL = 0xFFFF0000;
+    private static final int COLOR_CLEAN_BG = 0xF0212B36;
+    private static final int COLOR_CLEAN_VALUE = 0xFFFFFFFF;
+    private static final int COLOR_CLEAN_LABEL = 0xFF839DB1;
+    private static final int COLOR_CLEAN_UNIT = 0xFFC99566;
+    private static final int COLOR_CLEAN_PING = 0xFF2ED177;
+    private static final int COLOR_CLEAN_DIVIDER = 0xFF354451;
 
     @SuppressWarnings("null")
     private static final ThreadLocal<DecimalFormat> MEMORY_FORMAT = ThreadLocal
@@ -35,7 +31,7 @@ public class OverlayRenderer {
             .withInitial(() -> new DecimalFormat("0"));
     @SuppressWarnings("null")
     private static final ThreadLocal<DecimalFormat> AVG_FPS_FORMAT = ThreadLocal
-            .withInitial(() -> new DecimalFormat("0.0"));
+            .withInitial(() -> new DecimalFormat("0"));
 
     private static final Map<String, Text> TEXT_CACHE = new HashMap<>();
     private static boolean textCacheInitialized = false;
@@ -62,7 +58,22 @@ public class OverlayRenderer {
         if (linesToRender.isEmpty())
             return;
 
-        renderLines(ctx, client, linesToRender);
+        float scale = config.appearance.hudScale;
+        Object matricesRaw = ctx.getMatrices();
+
+        if (matricesRaw instanceof MatrixStack matrices) {
+            matrices.push();
+            matrices.scale(scale, scale, 1.0f);
+            renderLines(ctx, client, linesToRender);
+            matrices.pop();
+        } else if (matricesRaw instanceof Matrix3x2fStack matrices) {
+            matrices.pushMatrix();
+            matrices.scale(scale, scale);
+            renderLines(ctx, client, linesToRender);
+            matrices.popMatrix();
+        } else {
+            renderLines(ctx, client, linesToRender);
+        }
     }
 
     private static void ensureTextCacheInitialized() {
@@ -73,9 +84,6 @@ public class OverlayRenderer {
             TEXT_CACHE.put("ping", Text.translatable("text.fps_overlay.ping"));
             TEXT_CACHE.put("ms", Text.translatable("text.fps_overlay.ms"));
             TEXT_CACHE.put("gb", Text.translatable("text.fps_overlay.gb"));
-            TEXT_CACHE.put("mb", Text.translatable("text.fps_overlay.mb"));
-            TEXT_CACHE.put("used", Text.translatable("text.fps_overlay.used"));
-            TEXT_CACHE.put("total", Text.translatable("text.fps_overlay.total"));
 
             textCacheInitialized = true;
         }
@@ -89,6 +97,7 @@ public class OverlayRenderer {
         if (config.hud.showFps) {
             OverlayLine line = REUSABLE_LINES.get(lineIndex++);
             line.reset();
+            line.type = "fps";
             updateFpsLine(line, tracker);
             activeLines.add(line);
         }
@@ -96,6 +105,7 @@ public class OverlayRenderer {
         if (config.hud.showAverageFps) {
             OverlayLine line = REUSABLE_LINES.get(lineIndex++);
             line.reset();
+            line.type = "avg";
             updateAverageFpsLine(line, tracker);
             activeLines.add(line);
         }
@@ -103,6 +113,7 @@ public class OverlayRenderer {
         if (config.hud.showMemory) {
             OverlayLine line = REUSABLE_LINES.get(lineIndex++);
             line.reset();
+            line.type = "memory";
             updateMemoryLine(line, tracker);
             activeLines.add(line);
         }
@@ -110,6 +121,7 @@ public class OverlayRenderer {
         if (config.hud.showPing) {
             OverlayLine line = REUSABLE_LINES.get(lineIndex++);
             line.reset();
+            line.type = "ping";
             updatePingLine(line, tracker);
             activeLines.add(line);
         }
@@ -119,20 +131,12 @@ public class OverlayRenderer {
 
     private static void updateFpsLine(OverlayLine line, PerformanceTracker tracker) {
         int fps = tracker.getCurrentFps();
-        int fpsColor = getColorForFps(fps);
-
-        line.addPart(Text.literal(String.valueOf(fps)), fpsColor);
-        line.addSpacer(Text.literal(" "));
-        line.addPart(TEXT_CACHE.get("fps"), config.appearance.useAdaptiveColors ? fpsColor : getTextColor());
+        line.addPart(Text.literal(String.valueOf(fps)));
     }
 
     private static void updateAverageFpsLine(OverlayLine line, PerformanceTracker tracker) {
         double actualValue = tracker.getAverageFps();
-        int avgFpsColor = getColorForAverageFps((int) Math.round(actualValue));
-
-        line.addPart(Text.literal(AVG_FPS_FORMAT.get().format(actualValue)), avgFpsColor);
-        line.addSpacer(Text.literal(" "));
-        line.addPart(TEXT_CACHE.get("avg_fps"), config.appearance.useAdaptiveColors ? avgFpsColor : getTextColor());
+        line.addPart(Text.literal(AVG_FPS_FORMAT.get().format(actualValue)));
     }
 
     private static void updateMemoryLine(OverlayLine line, PerformanceTracker tracker) {
@@ -140,289 +144,249 @@ public class OverlayRenderer {
         long max = tracker.getMaxMemory();
 
         if (max == 0) {
-            line.addPart(Text.literal("N/A"), getTextColor());
+            line.addPart(Text.literal("N/A"));
             return;
         }
 
         double usedGB = used / (1024.0 * 1024.0 * 1024.0);
-        double maxGB = max / (1024.0 * 1024.0 * 1024.0);
-        double usagePercent = (double) used / max * 100;
-
-        int memoryColor = getColorForMemory(usagePercent);
-
-        line.addPart(Text.literal(MEMORY_FORMAT.get().format(usedGB)), memoryColor);
-        line.addSpacer(Text.literal("/"));
-        line.addPart(Text.literal(MEMORY_FORMAT.get().format(maxGB)), getTextColor());
-        line.addSpacer(Text.literal(" "));
-        line.addPart(TEXT_CACHE.get("gb"), getTextColor());
-
-        if (config.hud.showMemoryPercentage) {
-            line.addSpacer(Text.literal(" ("));
-            line.addPart(Text.literal(PERCENT_FORMAT.get().format(usagePercent) + "%"), memoryColor);
-            line.addSpacer(Text.literal(")"));
-        }
+        line.addPart(Text.literal(MEMORY_FORMAT.get().format(usedGB)));
     }
 
     private static void updatePingLine(OverlayLine line, PerformanceTracker tracker) {
         int ping = tracker.getCurrentPing();
-        int pingColor = getColorForPing(ping);
-
-        line.addPart(Text.literal(String.valueOf(ping)), pingColor);
-        line.addSpacer(Text.literal(" "));
-        line.addPart(TEXT_CACHE.get("ms"), getTextColor());
+        line.addPart(Text.literal(String.valueOf(ping)));
     }
 
-    private static void renderLines(DrawContext ctx, MinecraftClient client, List<OverlayLine> lines) {
-        TextRenderer renderer = client.textRenderer;
-        int verticalPadding = config.appearance.compactMode ? 2 : 4;
-        int lineHeight = renderer.fontHeight + verticalPadding;
-        int maxWidth = calculateMaxWidth(renderer, lines);
-        int totalHeight = (lines.size() * lineHeight) - (config.appearance.compactMode ? 0 : 2);
+    private static void renderLines(DrawContext ctx, MinecraftClient client, List<OverlayLine> segments) {
+        float scale = config.appearance.hudScale;
+        int sw = (int) (ctx.getScaledWindowWidth() / scale);
+        int sh = (int) (ctx.getScaledWindowHeight() / scale);
 
-        if (config.appearance.overlayStyle == ModConfig.OverlayStyle.MODERN) {
-            maxWidth += 8;
-            totalHeight += 4;
-        }
-
-        int screenWidth = ctx.getScaledWindowWidth();
-        int screenHeight = ctx.getScaledWindowHeight();
-
-        int[] position = calculatePosition(screenWidth, screenHeight, maxWidth, totalHeight);
-        int x = position[0];
-        int y = position[1];
-
-        float scale = config.appearance.scale;
-        Object matricesRaw = ctx.getMatrices();
-
-        if (matricesRaw instanceof MatrixStack matrices) {
-            matrices.push();
-            if (scale != 1.0f) {
-                matrices.scale(scale, scale, 1.0f);
-            }
-
-            int scaledX = (int) (x / scale);
-            int scaledY = (int) (y / scale);
-
-            drawBackground(ctx, scaledX, scaledY, maxWidth, totalHeight);
-            drawTextLines(ctx, renderer, lines, scaledX, scaledY, lineHeight, maxWidth);
-
-            matrices.pop();
+        if (config.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
+            renderNavbar(ctx, client, segments, sw, sh);
         } else {
-            drawBackground(ctx, x, y, maxWidth, totalHeight);
-            drawTextLines(ctx, renderer, lines, x, y, lineHeight, maxWidth);
+            renderDefault(ctx, client, segments, sw, sh);
         }
     }
 
-    private static void drawBackground(DrawContext ctx, int x, int y, int width, int height) {
-        if (!config.appearance.showBackground)
-            return;
+    private static void renderNavbar(DrawContext ctx, MinecraftClient client, List<OverlayLine> lines, int screenWidth,
+            int screenHeight) {
+        TextRenderer renderer = client.textRenderer;
 
-        int padding = config.appearance.padding;
-        int opacity = config.appearance.backgroundOpacity << 24;
-        int bgColor = opacity | (COLOR_BACKGROUND & 0xFFFFFF);
-
-        if (config.appearance.overlayStyle == ModConfig.OverlayStyle.MODERN) {
-            int borderColor = opacity | 0x404040;
-
-            ctx.fill(x - padding, y - padding,
-                    x + width + padding, y + height + padding,
-                    bgColor);
-
-            ctx.fill(x - padding, y - padding,
-                    x - padding + 3, y + height + padding,
-                    0xFFFFA500);
-
-            ctx.fill(x - padding + 3, y - padding,
-                    x + width + padding, y - padding + 1,
-                    borderColor);
-
-            ctx.fill(x + width + padding - 1, y - padding,
-                    x + width + padding, y + height + padding,
-                    borderColor);
-
-            ctx.fill(x - padding + 3, y + height + padding - 1,
-                    x + width + padding, y + height + padding,
-                    borderColor);
-
-        } else if (config.appearance.overlayStyle == ModConfig.OverlayStyle.CLASSIC) {
-            ctx.fill(x - padding, y - padding,
-                    x + width + padding, y + height + padding,
-                    bgColor);
-        }
-    }
-
-    private static void drawTextLines(DrawContext ctx, TextRenderer renderer, List<OverlayLine> lines, int x, int y,
-            int lineHeight, int fullWidth) {
-        int startY = y;
-        int startX = x;
-
-        if (config.appearance.overlayStyle == ModConfig.OverlayStyle.MODERN) {
-            startY += 2;
-            startX += 4;
-        }
-
-        boolean shadow = config.appearance.useTextShadow;
+        List<Text> segments = new ArrayList<>();
+        int totalWidth = 0;
+        int paddingX = 5;
 
         for (int i = 0; i < lines.size(); i++) {
             OverlayLine line = lines.get(i);
-            int lineY = startY + (i * lineHeight);
-            int currentX = startX;
+            String label = getLabelForType(line.type);
+            String value = line.parts.size() > 0 ? line.parts.get(0).text.getString() : "0";
+            String unit = getUnitForType(line.type);
 
-            for (int j = 0; j < line.parts.size(); j++) {
-                TextPart part = line.parts.get(j);
-                ctx.drawText(renderer, part.text, currentX, lineY, part.color, shadow);
-                currentX += renderer.getWidth(part.text);
+            // Construct part: "LABEL Value unit"
+            segments.add(Text.literal(label + " ").withColor(COLOR_CLEAN_LABEL));
 
-                if (j < line.spacers.size()) {
-                    Text spacer = line.spacers.get(j);
-                    if (spacer != null) {
-                        ctx.drawText(renderer, spacer, currentX, lineY, getTextColor(), shadow);
-                        currentX += renderer.getWidth(spacer);
-                    }
+            int valueColor = "ping".equals(line.type) && "0".equals(value) ? COLOR_CLEAN_PING : COLOR_CLEAN_VALUE;
+            segments.add(Text.literal(value).withColor(valueColor));
+
+            segments.add(Text.literal(unit).withColor(COLOR_CLEAN_UNIT));
+
+            if (i < lines.size() - 1) {
+                segments.add(Text.literal(" | ").withColor(COLOR_CLEAN_DIVIDER));
+            }
+        }
+
+        for (Text t : segments) {
+            totalWidth += renderer.getWidth(t);
+        }
+
+        int lineHeight = renderer.fontHeight + 3;
+
+        int x = calculateX(screenWidth, totalWidth + (paddingX * 2));
+        int y = calculateY(screenHeight, lineHeight);
+
+        if (config.appearance.showBackground) {
+            int opacity = config.appearance.backgroundOpacity;
+            int color = (opacity << 24) | (COLOR_CLEAN_BG & 0xFFFFFF);
+            drawRoundedRect(ctx, x, y, totalWidth + (paddingX * 2), lineHeight, 4, color);
+        }
+
+        int currentX = x + paddingX;
+        int textY = y + 2;
+        for (Text t : segments) {
+            ctx.drawText(renderer, t, currentX, textY, 0xFFFFFFFF, false);
+            currentX += renderer.getWidth(t);
+        }
+    }
+
+    private static void renderDefault(DrawContext ctx, MinecraftClient client, List<OverlayLine> lines, int screenWidth,
+            int screenHeight) {
+        TextRenderer renderer = client.textRenderer;
+
+        int verticalPadding = 1;
+        int lineHeight = renderer.fontHeight + verticalPadding;
+        int maxWidth = 80;
+
+        int dividerExtra = (lines.size() > 2) ? 3 : 0;
+        int totalHeight = (lines.size() * lineHeight) + dividerExtra;
+
+        int x = calculateX(screenWidth, maxWidth);
+        int y = calculateY(screenHeight, totalHeight);
+
+        if (config.appearance.showBackground) {
+            int opacity = config.appearance.backgroundOpacity;
+            int color = (opacity << 24) | (COLOR_CLEAN_BG & 0xFFFFFF);
+            int pad = 3;
+            drawRoundedRect(ctx, x - pad, y - pad, maxWidth + (pad * 2), totalHeight + (pad * 2), 4, color);
+        }
+
+        for (int i = 0; i < lines.size(); i++) {
+            OverlayLine line = lines.get(i);
+            int dividerOffset = (i > 1) ? 4 : 0;
+            int lineY = y + (i * lineHeight) + dividerOffset;
+
+            renderDefaultRow(ctx, renderer, line, x, lineY);
+
+            if (i == 1 && lines.size() > 2) {
+                int dividerY = lineY + renderer.fontHeight + 1;
+                ctx.fill(x, dividerY, x + maxWidth, dividerY + 1, COLOR_CLEAN_DIVIDER);
+            }
+        }
+    }
+
+    private static void renderDefaultRow(DrawContext ctx, TextRenderer renderer, OverlayLine line, int x, int y) {
+        String label = switch (line.type) {
+            case "fps" -> "FPS";
+            case "avg" -> "AVG";
+            case "memory" -> "RAM";
+            case "ping" -> "PING";
+            default -> "";
+        };
+
+        boolean shadow = false;
+        int labelX = x + 3;
+        int valueRightX = x + 58;
+        int unitLeftX = x + 61;
+
+        ctx.drawText(renderer, label, labelX, y, COLOR_CLEAN_LABEL, shadow);
+
+        String val = line.parts.size() > 0 ? line.parts.get(0).text.getString() : "0";
+        int valWidth = renderer.getWidth(val);
+        int unitColor = COLOR_CLEAN_UNIT;
+
+        if ("ping".equals(line.type)) {
+            int color = "0".equals(val) ? COLOR_CLEAN_PING : COLOR_CLEAN_VALUE;
+            ctx.drawText(renderer, val, valueRightX - valWidth, y, color, shadow);
+            renderScaledText(ctx, renderer, "ms", unitLeftX, y, unitColor, 0.65f, shadow);
+        } else if ("memory".equals(line.type)) {
+            ctx.drawText(renderer, val, valueRightX - valWidth, y, COLOR_CLEAN_VALUE, shadow);
+            renderScaledText(ctx, renderer, "GB", unitLeftX, y, unitColor, 0.65f, shadow);
+        } else {
+            int color = "fps".equals(line.type) ? COLOR_CLEAN_VALUE : COLOR_CLEAN_LABEL;
+            ctx.drawText(renderer, val, valueRightX - valWidth, y, color, shadow);
+            renderScaledText(ctx, renderer, "fps", unitLeftX, y, unitColor, 0.65f, shadow);
+        }
+    }
+
+    private static void renderScaledText(DrawContext ctx, TextRenderer renderer, String text, int x, int y, int color,
+            float scale, boolean shadow) {
+        Object matricesRaw = ctx.getMatrices();
+        if (matricesRaw instanceof MatrixStack matrices) {
+            matrices.push();
+            matrices.translate(x, y + 2.5f, 0);
+            matrices.scale(scale, scale, 1.0f);
+            ctx.drawText(renderer, text, 0, 0, color, shadow);
+            matrices.pop();
+        } else if (matricesRaw instanceof Matrix3x2fStack matrices) {
+            matrices.pushMatrix();
+            matrices.translate(x, y + 2.5f);
+            matrices.scale(scale, scale);
+            ctx.drawText(renderer, text, 0, 0, color, shadow);
+            matrices.popMatrix();
+        } else {
+            ctx.drawText(renderer, text, x, y, color, shadow);
+        }
+    }
+
+    private static void drawRoundedRect(DrawContext ctx, int x, int y, int width, int height, int radius, int color) {
+        ctx.fill(x + radius, y, x + width - radius, y + height, color);
+        ctx.fill(x, y + radius, x + radius, y + height - radius, color);
+        ctx.fill(x + width - radius, y + radius, x + width, y + height - radius, color);
+
+        drawCorner(ctx, x, y, radius, radius, true, true, color);
+        drawCorner(ctx, x + width - radius, y, radius, radius, false, true, color);
+        drawCorner(ctx, x, y + height - radius, radius, radius, true, false, color);
+        drawCorner(ctx, x + width - radius, y + height - radius, radius, radius, false, false, color);
+    }
+
+    private static void drawCorner(DrawContext ctx, int x, int y, int w, int h, boolean left, boolean top, int color) {
+        for (int i = 0; i < w; i++) {
+            for (int j = 0; j < h; j++) {
+                int dx = left ? (w - 1 - i) : i;
+                int dy = top ? (h - 1 - j) : j;
+                if (dx * dx + dy * dy <= w * w) {
+                    ctx.fill(x + i, y + j, x + i + 1, y + j + 1, color);
                 }
             }
         }
     }
 
-    private static int calculateMaxWidth(TextRenderer renderer, List<OverlayLine> lines) {
-        int maxWidth = 0;
-        for (OverlayLine line : lines) {
-            maxWidth = Math.max(maxWidth, calculateLineWidth(renderer, line));
-        }
-        return maxWidth;
+    private static String getLabelForType(String type) {
+        return switch (type) {
+            case "fps" -> "Fps";
+            case "avg" -> "Avg";
+            case "memory" -> "Mem";
+            case "ping" -> "Ping";
+            default -> "";
+        };
     }
 
-    private static int calculateLineWidth(TextRenderer renderer, OverlayLine line) {
-        int width = 0;
-
-        for (int i = 0; i < line.parts.size(); i++) {
-            width += renderer.getWidth(line.parts.get(i).text);
-            if (i < line.spacers.size()) {
-                Text spacer = line.spacers.get(i);
-                if (spacer != null) {
-                    width += renderer.getWidth(spacer);
-                }
-            }
-        }
-
-        return width;
+    private static String getUnitForType(String type) {
+        return switch (type) {
+            case "fps", "avg" -> " fps";
+            case "memory" -> "GB";
+            case "ping" -> " MS";
+            default -> "";
+        };
     }
 
-    private static int[] calculatePosition(int screenWidth, int screenHeight, int maxWidth, int totalHeight) {
-        int padding = config.appearance.padding;
-        int x = 0;
-        int y = 0;
-
-        if (config.appearance.position == null) {
-            config.appearance.position = ModConfig.OverlayPosition.TOP_LEFT;
-        }
-
-        switch (config.appearance.position) {
-            case TOP_LEFT -> {
-                x = padding;
-                y = padding;
-            }
-            case TOP_RIGHT -> {
-                x = screenWidth - maxWidth - padding - 5;
-                y = padding;
-            }
-            case BOTTOM_LEFT -> {
-                x = padding;
-                y = screenHeight - totalHeight - padding - 5;
-            }
-            case BOTTOM_RIGHT -> {
-                x = screenWidth - maxWidth - padding - 5;
-                y = screenHeight - totalHeight - padding - 5;
-            }
-        }
-
-        x = Math.max(0, Math.min(x, screenWidth - maxWidth));
-        y = Math.max(0, Math.min(y, screenHeight - totalHeight));
-
-        return new int[] { x, y };
+    private static int calculateX(int screenWidth, int totalWidth) {
+        int margin = 4;
+        return switch (config.appearance.position) {
+            case TOP_LEFT, BOTTOM_LEFT -> margin;
+            case TOP_RIGHT, BOTTOM_RIGHT -> screenWidth - totalWidth - margin;
+            case TOP_CENTER -> (screenWidth - totalWidth) / 2;
+        };
     }
 
-    private static int getTextColor() {
-        try {
-            return Integer.parseInt(config.appearance.textColorHex.substring(1), 16) | 0xFF000000;
-        } catch (Exception e) {
-            return COLOR_NEUTRAL;
-        }
+    private static int calculateY(int screenHeight, int totalHeight) {
+        int margin = 4;
+        return switch (config.appearance.position) {
+            case TOP_LEFT, TOP_RIGHT, TOP_CENTER -> margin;
+            case BOTTOM_LEFT, BOTTOM_RIGHT -> screenHeight - totalHeight - margin;
+        };
     }
 
-    private static int getColorForMemory(double usagePercent) {
-        if (!config.appearance.useAdaptiveColors)
-            return getTextColor();
-        if (usagePercent <= 75)
-            return COLOR_EXCELLENT;
-        if (usagePercent <= 90)
-            return COLOR_GOOD;
-        if (usagePercent <= 95)
-            return COLOR_WARNING;
-        return COLOR_CRITICAL;
-    }
-
-    private static int getColorForPing(int ping) {
-        if (!config.appearance.useAdaptiveColors)
-            return getTextColor();
-        if (ping <= 50)
-            return COLOR_EXCELLENT;
-        if (ping <= 100)
-            return COLOR_GOOD;
-        if (ping <= 200)
-            return COLOR_WARNING;
-        return COLOR_CRITICAL;
-    }
-
-    private static int getColorForFps(int fps) {
-        if (!config.appearance.useAdaptiveColors)
-            return getTextColor();
-        if (fps >= 144)
-            return COLOR_EXCELLENT;
-        if (fps >= 60)
-            return COLOR_GOOD;
-        if (fps >= 30)
-            return COLOR_WARNING;
-        return COLOR_CRITICAL;
-    }
-
-    private static int getColorForAverageFps(int fps) {
-        if (!config.appearance.useAdaptiveColors)
-            return getTextColor();
-        if (fps >= 120)
-            return COLOR_AVG_EXCELLENT;
-        if (fps >= 60)
-            return COLOR_AVG_GOOD;
-        if (fps >= 30)
-            return COLOR_AVG_WARNING;
-        return COLOR_AVG_CRITICAL;
-    }
-
+    // Inner classes
     private static class OverlayLine {
         final List<TextPart> parts = new ArrayList<>(5);
-        final List<Text> spacers = new ArrayList<>(5);
+        String type = "";
 
         void reset() {
             parts.clear();
-            spacers.clear();
+            type = "";
         }
 
-        void addPart(Text text, int color) {
-            parts.add(new TextPart(text, color));
-        }
-
-        void addSpacer(Text text) {
-            spacers.add(text);
+        void addPart(Text text) {
+            parts.add(new TextPart(text));
         }
     }
 
     private static class TextPart {
         final Text text;
-        final int color;
 
-        TextPart(Text text, int color) {
+        TextPart(Text text) {
             this.text = text;
-            this.color = color;
         }
     }
 }

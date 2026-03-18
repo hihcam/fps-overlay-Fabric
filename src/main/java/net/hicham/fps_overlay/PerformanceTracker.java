@@ -1,39 +1,29 @@
 package net.hicham.fps_overlay;
 
 import net.minecraft.client.MinecraftClient;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class PerformanceTracker {
     private static final PerformanceTracker INSTANCE = new PerformanceTracker();
 
     private ModConfig config;
 
-    private final AtomicInteger currentFps = new AtomicInteger(0);
-    private final AtomicLong usedMemory = new AtomicLong(0);
-    private final AtomicLong maxMemory = new AtomicLong(0);
-    private final AtomicInteger currentPing = new AtomicInteger(0);
+    // Performance data - simple primitives
+    private int currentFps = 0;
+    private long usedMemory = 0;
+    private long maxMemory = 0;
+    private int currentPing = 0;
 
-    private final AtomicLong averageFps = new AtomicLong(0);
-    private final ConcurrentLinkedQueue<FpsSample> fpsSamples = new ConcurrentLinkedQueue<>();
+    // Average FPS tracking - Circular Buffer
+    private double averageFps = 0;
+    private final int[] fpsBuffer = new int[200]; // Stores up to 200 samples
+    private int bufferIndex = 0;
+    private int bufferSize = 0;
 
-    private final AtomicLong lastUpdateTime = new AtomicLong(0);
-    private final AtomicLong lastAverageUpdateTime = new AtomicLong(0);
-    private static final long NANOS_PER_MILLI = 1_000_000L;
+    // Timing
+    private long lastUpdateTime = 0;
+    private long lastAverageUpdateTime = 0;
 
-    private static class FpsSample {
-        final long timestamp;
-        final int fps;
-
-        FpsSample(long timestamp, int fps) {
-            this.timestamp = timestamp;
-            this.fps = fps;
-        }
-    }
-
-    private PerformanceTracker() {
-    }
+    private PerformanceTracker() {}
 
     public static PerformanceTracker getInstance() {
         return INSTANCE;
@@ -44,80 +34,62 @@ public class PerformanceTracker {
     }
 
     public void update(MinecraftClient client) {
-        if (config == null)
-            return;
+        if (config == null) return;
 
-        long currentTime = System.nanoTime() / NANOS_PER_MILLI;
-        long timeSinceLastUpdate = currentTime - lastUpdateTime.get();
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastUpdateTime < config.general.updateIntervalMs) return;
+        lastUpdateTime = currentTime;
 
-        if (timeSinceLastUpdate < config.general.updateIntervalMs)
-            return;
+        // 1. Update Current FPS
+        this.currentFps = Math.max(0, client.getCurrentFps());
 
-        lastUpdateTime.set(currentTime);
+        // 2. Update Average FPS (Circular Buffer)
+        this.averageFps = calculateAverageFps(this.currentFps, currentTime);
 
-        currentFps.set(Math.max(0, client.getCurrentFps()));
+        // 3. Update Memory
+        updateMemoryData();
 
-        updateAverageFps(currentTime);
+        // 4. Update Ping
+        this.currentPing = fetchCurrentPing(client);
+    }
 
+    private double calculateAverageFps(int newFps, long currentTime) {
+        // Add to circular buffer
+        fpsBuffer[bufferIndex] = newFps;
+        bufferIndex = (bufferIndex + 1) % fpsBuffer.length;
+        if (bufferSize < fpsBuffer.length) bufferSize++;
+
+        // Calculate average every interval (e.g. 1 second or based on config)
+        if (currentTime - lastAverageUpdateTime >= 1000 || lastAverageUpdateTime == 0) {
+            lastAverageUpdateTime = currentTime;
+            
+            if (bufferSize == 0) return 0;
+            
+            long sum = 0;
+            for (int i = 0; i < bufferSize; i++) {
+                sum += fpsBuffer[i];
+            }
+            return sum / (double) bufferSize;
+        }
+        
+        return this.averageFps; // Return current average if not time to recalculate
+    }
+
+    private void updateMemoryData() {
         try {
             Runtime runtime = Runtime.getRuntime();
-            long total = runtime.totalMemory();
-            long free = runtime.freeMemory();
-            usedMemory.set(total - free);
-            maxMemory.set(runtime.maxMemory());
+            this.usedMemory = runtime.totalMemory() - runtime.freeMemory();
+            this.maxMemory = runtime.maxMemory();
         } catch (Exception e) {
-        }
-
-        currentPing.set(getCurrentPing(client));
-    }
-
-    private void updateAverageFps(long currentTime) {
-        if (!config.hud.showAverageFps)
-            return;
-
-        try {
-            fpsSamples.offer(new FpsSample(currentTime, currentFps.get()));
-
-            long cutoffTime = currentTime - config.hud.averageWindowMs;
-            while (!fpsSamples.isEmpty() && fpsSamples.peek().timestamp < cutoffTime) {
-                fpsSamples.poll();
-            }
-
-            long timeSinceLastAverageUpdate = currentTime - lastAverageUpdateTime.get();
-            if (timeSinceLastAverageUpdate >= 10000 || lastAverageUpdateTime.get() == 0) {
-                lastAverageUpdateTime.set(currentTime);
-
-                if (!fpsSamples.isEmpty()) {
-                    long sum = 0;
-                    int count = 0;
-
-                    for (FpsSample sample : fpsSamples) {
-                        if (sample.timestamp >= cutoffTime) {
-                            sum += sample.fps;
-                            count++;
-                        }
-                    }
-
-                    if (count > 0) {
-                        double newAverage = sum / (double) count;
-                        long newAverageLong = (long) (newAverage * 10);
-                        averageFps.set(newAverageLong);
-                    }
-                }
-            }
-        } catch (Exception e) {
+            // Ignore
         }
     }
 
-    private int getCurrentPing(MinecraftClient client) {
+    private int fetchCurrentPing(MinecraftClient client) {
+        var handler = client.getNetworkHandler();
         var player = client.player;
-        if (client.getNetworkHandler() == null || player == null)
-            return 0;
-
+        if (handler == null || player == null) return 0;
         try {
-            var handler = client.getNetworkHandler();
-            if (handler == null)
-                return 0;
             var entry = handler.getPlayerListEntry(player.getUuid());
             return entry != null ? Math.max(0, entry.getLatency()) : 0;
         } catch (Exception e) {
@@ -126,28 +98,16 @@ public class PerformanceTracker {
     }
 
     public void clearAverageFpsData() {
-        fpsSamples.clear();
-        averageFps.set(0);
-        lastAverageUpdateTime.set(0);
+        bufferIndex = 0;
+        bufferSize = 0;
+        averageFps = 0;
+        lastAverageUpdateTime = 0;
     }
 
-    public int getCurrentFps() {
-        return currentFps.get();
-    }
-
-    public long getUsedMemory() {
-        return usedMemory.get();
-    }
-
-    public long getMaxMemory() {
-        return maxMemory.get();
-    }
-
-    public int getCurrentPing() {
-        return currentPing.get();
-    }
-
-    public double getAverageFps() {
-        return averageFps.get() / 10.0;
-    }
+    // Simple Getters
+    public int getCurrentFps() { return currentFps; }
+    public long getUsedMemory() { return usedMemory; }
+    public long getMaxMemory() { return maxMemory; }
+    public int getCurrentPing() { return currentPing; }
+    public double getAverageFps() { return averageFps; }
 }
