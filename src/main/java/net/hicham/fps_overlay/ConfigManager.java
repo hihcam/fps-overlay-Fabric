@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ConfigManager {
     private static final Logger LOGGER = LogManager.getLogger("fps_overlay/ConfigManager");
     private static final AtomicBoolean initialized = new AtomicBoolean(false);
+    private static File configFile;
+    private static ModConfig config;
 
     @SuppressWarnings("null")
     public static final Event<ConfigChangedCallback> CONFIG_CHANGED = java.util.Objects.requireNonNull(EventFactory.createArrayBacked(
@@ -46,7 +48,8 @@ public class ConfigManager {
                 configDir.toFile().mkdirs();
             }
 
-            ModConfig.init(configFile);
+            ConfigManager.configFile = configFile;
+            config = ModConfig.load(configFile);
             initialized.set(true);
             LOGGER.info("Configuration manager initialized successfully");
         } catch (Exception e) {
@@ -57,18 +60,21 @@ public class ConfigManager {
 
     public static ModConfig getConfig() {
         ensureInitialized();
-        return ModConfig.get();
+        if (config == null) {
+            config = new ModConfig();
+        }
+        return config;
     }
 
     public static void saveConfig() {
         ensureInitialized();
-        ModConfig.save();
+        ModConfig.save(configFile, getConfig());
         CONFIG_CHANGED.invoker().onConfigChanged();
     }
 
     public static void resetToDefaults() {
         ensureInitialized();
-        ModConfig.get().resetToDefaults();
+        getConfig().resetToDefaults();
         saveConfig();
         LOGGER.info("Configuration reset to defaults");
     }
@@ -90,5 +96,7 @@ public class ConfigManager {
 
     public static void cleanup() {
         initialized.set(false);
+        config = null;
+        configFile = null;
     }
 }

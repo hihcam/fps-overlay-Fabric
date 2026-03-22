@@ -9,470 +9,505 @@ import org.joml.Matrix3x2fStack;
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-// Main renderer for the FPS Overlay
 public class OverlayRenderer {
     private static ModConfig config;
 
-    private static final int COLOR_CLEAN_BG = 0xF0212B36;
-    private static final int COLOR_CLEAN_VALUE = 0xFFFFFFFF;
-    private static final int COLOR_CLEAN_LABEL = 0xFF839DB1;
-    private static final int COLOR_CLEAN_UNIT = 0xFFC99566;
-    private static final int COLOR_CLEAN_DIVIDER = 0xFF354451;
-
-    private static final int COLOR_GOOD = 0xFF2ED177;
-    private static final int COLOR_MID = 0xFFFFD100;
-    private static final int COLOR_BAD = 0xFFFF4545;
-
-    @SuppressWarnings("null")
-    private static final ThreadLocal<DecimalFormat> MEMORY_FORMAT = java.util.Objects.requireNonNull(ThreadLocal
-            .withInitial(() -> new DecimalFormat("0.0")));
-
-    @SuppressWarnings("null")
-    private static final ThreadLocal<DecimalFormat> AVG_FPS_FORMAT = java.util.Objects.requireNonNull(ThreadLocal
-            .withInitial(() -> new DecimalFormat("0")));
-
-    private static final Map<String, Text> TEXT_CACHE = new HashMap<>();
-    private static boolean textCacheInitialized = false;
-
-    private static final List<OverlayLine> REUSABLE_LINES = new ArrayList<>(6);
-
-    static {
-        for (int i = 0; i < 6; i++) {
-            REUSABLE_LINES.add(new OverlayLine());
-        }
-    }
+    private static final ThreadLocal<DecimalFormat> ONE_DECIMAL = ThreadLocal.withInitial(() -> new DecimalFormat("0.0"));
+    private static final ThreadLocal<DecimalFormat> WHOLE_NUMBER = ThreadLocal.withInitial(() -> new DecimalFormat("0"));
+    private static final int GRAPH_HEIGHT = 24;
 
     public static void setConfig(ModConfig configData) {
         config = configData;
     }
 
-    // Main render entry point called by HudRenderCallback
-    public static void render(DrawContext ctx, MinecraftClient client) {
-        if (config == null || !config.general.enabled)
+    public static void render(DrawContext context, MinecraftClient client) {
+        if (config == null || !config.general.enabled) {
             return;
-
-        ensureTextCacheInitialized();
+        }
 
         PerformanceTracker tracker = PerformanceTracker.getInstance();
         tracker.recordFrame();
 
-        if (config.appearance.autoHideF3 && client.getDebugHud().shouldShowDebugHud())
+        if (config.appearance.autoHideF3 && client.getDebugHud().shouldShowDebugHud()) {
             return;
+        }
 
-        List<OverlayLine> linesToRender = prepareLines();
-        if (linesToRender.isEmpty())
+        List<OverlayLine> lines = prepareLines(config, tracker, false);
+        if (lines.isEmpty() && !config.hud.showGraph) {
             return;
+        }
 
         float scale = config.appearance.hudScale;
-        Object matricesRaw = ctx.getMatrices();
-
-        if (matricesRaw instanceof MatrixStack matrices) {
-            matrices.push();
-            matrices.scale(scale, scale, 1.0f);
-            renderLines(ctx, client, linesToRender);
-            matrices.pop();
-        } else if (matricesRaw instanceof Matrix3x2fStack matrices) {
-            matrices.pushMatrix();
-            matrices.scale(scale, scale);
-            renderLines(ctx, client, linesToRender);
-            matrices.popMatrix();
-        } else {
-            renderLines(ctx, client, linesToRender);
-        }
+        applyScale(context, scale, () -> renderScaled(context, client, config, lines, false));
     }
 
-    private static void ensureTextCacheInitialized() {
-        if (!textCacheInitialized) {
-            TEXT_CACHE.put("fps", Text.translatable("text.fps_overlay.fps"));
-            TEXT_CACHE.put("avg_fps", Text.translatable("text.fps_overlay.avg_fps"));
-            TEXT_CACHE.put("memory", Text.translatable("text.fps_overlay.memory"));
-            TEXT_CACHE.put("ping", Text.translatable("text.fps_overlay.ping"));
-            TEXT_CACHE.put("ms", Text.translatable("text.fps_overlay.ms"));
-            TEXT_CACHE.put("gb", Text.translatable("text.fps_overlay.gb"));
-            TEXT_CACHE.put("tps", Text.translatable("text.fps_overlay.tps"));
-            TEXT_CACHE.put("mspt", Text.translatable("text.fps_overlay.mspt"));
-            TEXT_CACHE.put("low", Text.translatable("text.fps_overlay.1percent_low"));
-
-            textCacheInitialized = true;
-        }
-    }
-
-    // Prepare the list of lines to be rendered based on user configuration
-    private static List<OverlayLine> prepareLines() {
-        List<OverlayLine> activeLines = new ArrayList<>(4);
-        PerformanceTracker tracker = PerformanceTracker.getInstance();
-        int lineIndex = 0;
-
-        if (config.hud.showFps) {
-            OverlayLine line = REUSABLE_LINES.get(lineIndex++);
-            line.reset();
-            line.type = "fps";
-            updateFpsLine(line, tracker);
-            activeLines.add(line);
-        }
-
-        if (config.hud.showAverageFps) {
-            OverlayLine line = REUSABLE_LINES.get(lineIndex++);
-            line.reset();
-            line.type = "avg";
-            updateAverageFpsLine(line, tracker);
-            activeLines.add(line);
-        }
-
-        if (config.hud.showMemory) {
-            OverlayLine line = REUSABLE_LINES.get(lineIndex++);
-            line.reset();
-            line.type = "memory";
-            updateMemoryLine(line, tracker);
-            activeLines.add(line);
-        }
-
-        if (config.hud.showPing) {
-            OverlayLine line = REUSABLE_LINES.get(lineIndex++);
-            line.reset();
-            line.type = "ping";
-            updatePingLine(line, tracker);
-            activeLines.add(line);
-        }
-
-        if (config.hud.show1PercentLow) {
-            OverlayLine line = REUSABLE_LINES.size() > lineIndex ? REUSABLE_LINES.get(lineIndex++) : new OverlayLine();
-            line.reset();
-            line.type = "low";
-            line.addPart(Text.literal(String.valueOf(tracker.getOnePercentLow())));
-            activeLines.add(line);
-        }
-
-        if (config.hud.showMspt) {
-            OverlayLine line = REUSABLE_LINES.size() > lineIndex ? REUSABLE_LINES.get(lineIndex++) : new OverlayLine();
-            line.reset();
-            line.type = "mspt";
-            double mspt = tracker.getMspt();
-            line.addPart(Text.literal(MEMORY_FORMAT.get().format(mspt)));
-            activeLines.add(line);
-        }
-
-        if (config.hud.showTps) {
-            OverlayLine line = REUSABLE_LINES.size() > lineIndex ? REUSABLE_LINES.get(lineIndex++) : new OverlayLine();
-            line.reset();
-            line.type = "tps";
-            double tps = tracker.getTps();
-            line.addPart(Text.literal(MEMORY_FORMAT.get().format(tps)));
-            activeLines.add(line);
-        }
-
-        return activeLines;
-    }
-
-    private static void updateFpsLine(OverlayLine line, PerformanceTracker tracker) {
-        int fps = tracker.getCurrentFps();
-        line.addPart(Text.literal(String.valueOf(fps)));
-    }
-
-    private static void updateAverageFpsLine(OverlayLine line, PerformanceTracker tracker) {
-        double actualValue = tracker.getAverageFps();
-        line.addPart(Text.literal(AVG_FPS_FORMAT.get().format(actualValue)));
-    }
-
-    private static void updateMemoryLine(OverlayLine line, PerformanceTracker tracker) {
-        long used = tracker.getUsedMemory();
-        long max = tracker.getMaxMemory();
-
-        if (max == 0) {
-            line.addPart(Text.literal("N/A"));
-            return;
-        }
-
-        double usedGB = used / (1024.0 * 1024.0 * 1024.0);
-        line.addPart(Text.literal(MEMORY_FORMAT.get().format(usedGB)));
-    }
-
-    private static void updatePingLine(OverlayLine line, PerformanceTracker tracker) {
-        int ping = tracker.getCurrentPing();
-        line.addPart(Text.literal(String.valueOf(ping)));
-    }
-
-    // Route to the appropriate style renderer
-    private static void renderLines(DrawContext ctx, MinecraftClient client, List<OverlayLine> segments) {
-        float scale = config.appearance.hudScale;
-        int sw = (int) (ctx.getScaledWindowWidth() / scale);
-        int sh = (int) (ctx.getScaledWindowHeight() / scale);
-
-        if (config.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
-            renderNavbar(ctx, client, segments, sw, sh);
-        } else {
-            renderDefault(ctx, client, segments, sw, sh);
-        }
-    }
-
-    // Horizontal Navbar Style Renderer
-    private static void renderNavbar(DrawContext ctx, MinecraftClient client, List<OverlayLine> lines, int screenWidth,
+    public static void renderPreview(DrawContext context, MinecraftClient client, ModConfig previewConfig, int screenWidth,
             int screenHeight) {
-        TextRenderer renderer = client.textRenderer;
+        if (previewConfig == null) {
+            return;
+        }
 
-        List<Text> segments = new ArrayList<>();
-        int totalWidth = 0;
-        int paddingX = 5;
+        List<OverlayLine> lines = prepareLines(previewConfig, PerformanceTracker.getInstance(), true);
+        float scale = previewConfig.appearance.hudScale;
+        applyScale(context, scale, () -> renderScaled(context, client, previewConfig, lines, true));
+    }
+
+    public static LayoutBounds getPreviewBounds(int screenWidth, int screenHeight, ModConfig previewConfig) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        TextRenderer renderer = client != null ? client.textRenderer : null;
+        List<OverlayLine> lines = prepareLines(previewConfig, PerformanceTracker.getInstance(), true);
+        LayoutBounds logicalBounds = getPreviewLogicalBounds(screenWidth, screenHeight, previewConfig, renderer, lines);
+        float scale = previewConfig.appearance.hudScale;
+        return new LayoutBounds(
+                Math.round(logicalBounds.x() * scale),
+                Math.round(logicalBounds.y() * scale),
+                Math.round(logicalBounds.width() * scale),
+                Math.round(logicalBounds.height() * scale));
+    }
+
+    public static LayoutBounds getPreviewLogicalBounds(int screenWidth, int screenHeight, ModConfig previewConfig) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        TextRenderer renderer = client != null ? client.textRenderer : null;
+        List<OverlayLine> lines = prepareLines(previewConfig, PerformanceTracker.getInstance(), true);
+        return getPreviewLogicalBounds(screenWidth, screenHeight, previewConfig, renderer, lines);
+    }
+
+    private static LayoutBounds getPreviewLogicalBounds(int screenWidth, int screenHeight, ModConfig previewConfig,
+            TextRenderer renderer, List<OverlayLine> lines) {
+        float scale = previewConfig.appearance.hudScale;
+        int logicalWidth = Math.max(1, Math.round(screenWidth / scale));
+        int logicalHeight = Math.max(1, Math.round(screenHeight / scale));
+        return measureBounds(renderer, previewConfig, lines, logicalWidth, logicalHeight);
+    }
+
+    public static AnchorPoint getAnchorPoint(int screenWidth, int screenHeight, int contentWidth, int contentHeight,
+            ModConfig.OverlayPosition position) {
+        int x = switch (position) {
+            case TOP_LEFT, CENTER_LEFT, BOTTOM_LEFT -> 4;
+            case TOP_CENTER, BOTTOM_CENTER -> (screenWidth - contentWidth) / 2;
+            case TOP_RIGHT, CENTER_RIGHT, BOTTOM_RIGHT -> screenWidth - contentWidth - 4;
+        };
+
+        int y = switch (position) {
+            case TOP_LEFT, TOP_CENTER, TOP_RIGHT -> 4;
+            case CENTER_LEFT, CENTER_RIGHT -> (screenHeight - contentHeight) / 2;
+            case BOTTOM_LEFT, BOTTOM_CENTER, BOTTOM_RIGHT -> screenHeight - contentHeight - 4;
+        };
+
+        return new AnchorPoint(x, y);
+    }
+
+    private static void renderScaled(DrawContext context, MinecraftClient client, ModConfig activeConfig,
+            List<OverlayLine> lines, boolean preview) {
+        TextRenderer renderer = client != null ? client.textRenderer : MinecraftClient.getInstance().textRenderer;
+        if (renderer == null) {
+            return;
+        }
+
+        int screenWidth = (int) (context.getScaledWindowWidth() / activeConfig.appearance.hudScale);
+        int screenHeight = (int) (context.getScaledWindowHeight() / activeConfig.appearance.hudScale);
+        LayoutBounds bounds = measureBounds(renderer, activeConfig, lines, screenWidth, screenHeight);
+
+        if (activeConfig.appearance.showBackground) {
+            drawRoundedRect(context, bounds.x(), bounds.y(), bounds.width(), bounds.height(), 4,
+                    getBackgroundColor(activeConfig));
+        }
+
+        if (activeConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
+            renderNavbar(context, renderer, activeConfig, lines, bounds);
+        } else {
+            renderVertical(context, renderer, activeConfig, lines, bounds);
+        }
+
+        if (activeConfig.hud.showGraph) {
+            int[] graphValues = preview ? getPreviewGraphValues() : PerformanceTracker.getInstance().copyGraphValues();
+            renderGraph(context, activeConfig, bounds, graphValues);
+        }
+    }
+
+    private static void renderNavbar(DrawContext context, TextRenderer renderer, ModConfig activeConfig,
+            List<OverlayLine> lines, LayoutBounds bounds) {
+        int padding = 6;
+        int currentX = bounds.x() + padding;
+        int textY = bounds.y() + 4;
 
         for (int i = 0; i < lines.size(); i++) {
             OverlayLine line = lines.get(i);
-            String label = getLabelForType(line.type);
-            String value = line.parts.size() > 0 ? line.parts.get(0).text.getString() : "0";
-            String unit = getUnitForType(line.type);
+            drawStyledText(context, renderer, activeConfig, line.label(), currentX, textY, getLabelColor(activeConfig));
+            currentX += renderer.getWidth(line.label()) + 4;
 
-            // Construct part: "LABEL Value unit"
-            segments.add(Text.literal(label + " ").withColor(COLOR_CLEAN_LABEL));
+            drawStyledText(context, renderer, activeConfig, line.value(), currentX, textY,
+                    getAdaptiveColor(activeConfig, line));
+            currentX += renderer.getWidth(line.value());
 
-            int valueColor = getAdaptiveColor(line.type, value);
-            segments.add(Text.literal(value).withColor(valueColor));
-
-            segments.add(Text.literal(unit).withColor(COLOR_CLEAN_UNIT));
+            if (!line.unit().isEmpty()) {
+                currentX += 3;
+                drawStyledText(context, renderer, activeConfig, line.unit(), currentX, textY, getUnitColor(activeConfig));
+                currentX += renderer.getWidth(line.unit());
+            }
 
             if (i < lines.size() - 1) {
-                segments.add(Text.literal(" | ").withColor(COLOR_CLEAN_DIVIDER));
-            }
-        }
-
-        for (Text t : segments) {
-            totalWidth += renderer.getWidth(t);
-        }
-
-        int lineHeight = renderer.fontHeight + 3;
-
-        int x = calculateX(screenWidth, totalWidth + (paddingX * 2));
-        int y = calculateY(screenHeight, lineHeight);
-
-        if (config.appearance.showBackground) {
-            int opacity = config.appearance.backgroundOpacity;
-            int color = (opacity << 24) | (COLOR_CLEAN_BG & 0xFFFFFF);
-            drawRoundedRect(ctx, x, y, totalWidth + (paddingX * 2), lineHeight, 4, color);
-        }
-
-        int currentX = x + paddingX;
-        int textY = y + 2;
-        for (Text t : segments) {
-            ctx.drawText(renderer, t, currentX, textY, 0xFFFFFFFF, false);
-            currentX += renderer.getWidth(t);
-        }
-    }
-
-    // Vertical Box Style Renderer (Default)
-    private static void renderDefault(DrawContext ctx, MinecraftClient client, List<OverlayLine> lines, int screenWidth,
-            int screenHeight) {
-        TextRenderer renderer = client.textRenderer;
-
-        int verticalPadding = 1;
-        int lineHeight = renderer.fontHeight + verticalPadding;
-        int maxWidth = 80;
-
-        int dividerExtra = (lines.size() > 2) ? 3 : 0;
-        int totalHeight = (lines.size() * lineHeight) + dividerExtra;
-
-        int x = calculateX(screenWidth, maxWidth);
-        int y = calculateY(screenHeight, totalHeight);
-
-        if (config.appearance.showBackground) {
-            int opacity = config.appearance.backgroundOpacity;
-            int color = (opacity << 24) | (COLOR_CLEAN_BG & 0xFFFFFF);
-            int pad = 3;
-            drawRoundedRect(ctx, x - pad, y - pad, maxWidth + (pad * 2), totalHeight + (pad * 2), 4, color);
-        }
-
-        for (int i = 0; i < lines.size(); i++) {
-            OverlayLine line = lines.get(i);
-            int dividerOffset = (i > 1) ? 4 : 0;
-            int lineY = y + (i * lineHeight) + dividerOffset;
-
-            renderDefaultRow(ctx, renderer, line, x, lineY);
-
-            if (i == 1 && lines.size() > 2) {
-                int dividerY = lineY + renderer.fontHeight + 1;
-                ctx.fill(x, dividerY, x + maxWidth, dividerY + 1, COLOR_CLEAN_DIVIDER);
+                currentX += 6;
+                drawStyledText(context, renderer, activeConfig, "|", currentX, textY, getDividerColor(activeConfig));
+                currentX += renderer.getWidth("|") + 6;
             }
         }
     }
 
-    private static void renderDefaultRow(DrawContext ctx, TextRenderer renderer, OverlayLine line, int x, int y) {
-        String label = switch (line.type) {
-            case "fps" -> "Fps";
-            case "avg" -> "Avg";
-            case "low" -> "1%Low";
-            case "memory" -> "Ram";
-            case "ping" -> "Ping";
-            case "mspt" -> "Mspt";
-            case "tps" -> "Tps";
-            default -> "";
-        };
+    private static void renderVertical(DrawContext context, TextRenderer renderer, ModConfig activeConfig,
+            List<OverlayLine> lines, LayoutBounds bounds) {
+        int padding = 6;
+        int lineHeight = renderer.fontHeight + 2;
+        int currentY = bounds.y() + padding;
 
-        boolean shadow = false;
-        int labelX = x + 3;
-        int valueRightX = x + 58;
-        int unitLeftX = x + 61;
+        for (OverlayLine line : lines) {
+            int currentX = bounds.x() + padding;
+            drawStyledText(context, renderer, activeConfig, line.label(), currentX, currentY, getLabelColor(activeConfig));
+            currentX += renderer.getWidth(line.label()) + 4;
 
-        ctx.drawText(renderer, label, labelX, y, COLOR_CLEAN_LABEL, shadow);
+            drawStyledText(context, renderer, activeConfig, line.value(), currentX, currentY,
+                    getAdaptiveColor(activeConfig, line));
+            currentX += renderer.getWidth(line.value());
 
-        String val = line.parts.size() > 0 ? line.parts.get(0).text.getString() : "0";
-        int valWidth = renderer.getWidth(val);
-        int unitColor = COLOR_CLEAN_UNIT;
+            if (!line.unit().isEmpty()) {
+                currentX += 3;
+                drawStyledText(context, renderer, activeConfig, line.unit(), currentX, currentY, getUnitColor(activeConfig));
+            }
 
-        if ("ping".equals(line.type)) {
-            int color = getAdaptiveColor(line.type, val);
-            ctx.drawText(renderer, val, valueRightX - valWidth, y, color, shadow);
-            renderScaledText(ctx, renderer, "ms", unitLeftX, y, unitColor, 0.65f, shadow);
-        } else if ("memory".equals(line.type)) {
-            int color = getAdaptiveColor(line.type, val);
-            ctx.drawText(renderer, val, valueRightX - valWidth, y, color, shadow);
-            renderScaledText(ctx, renderer, "gb", unitLeftX, y, unitColor, 0.65f, shadow);
-        } else if ("mspt".equals(line.type)) {
-            int color = getAdaptiveColor(line.type, val);
-            ctx.drawText(renderer, val, valueRightX - valWidth, y, color, shadow);
-            renderScaledText(ctx, renderer, "ms", unitLeftX, y, unitColor, 0.65f, shadow);
-        } else if ("tps".equals(line.type)) {
-            int color = getAdaptiveColor(line.type, val);
-            ctx.drawText(renderer, val, valueRightX - valWidth, y, color, shadow);
-            renderScaledText(ctx, renderer, "tps", unitLeftX, y, unitColor, 0.65f, shadow);
-        } else {
-            int color = getAdaptiveColor(line.type, val);
-            ctx.drawText(renderer, val, valueRightX - valWidth, y, color, shadow);
-            renderScaledText(ctx, renderer, "fps", unitLeftX, y, unitColor, 0.65f, shadow);
+            currentY += lineHeight;
         }
     }
 
-    // Determine text color based on performance thresholds
-    private static int getAdaptiveColor(String type, String value) {
-        if (!config.appearance.adaptiveColors)
-            return COLOR_CLEAN_VALUE;
+    private static void renderGraph(DrawContext context, ModConfig activeConfig, LayoutBounds bounds, int[] values) {
+        if (values.length < 2) {
+            return;
+        }
 
-        try {
-            double val = Double.parseDouble(value.replace(",", "."));
-            return switch (type) {
-                case "fps", "avg", "low" -> (val >= 60) ? COLOR_GOOD : (val >= 30 ? COLOR_MID : COLOR_BAD);
-                case "ping" -> (val < 60) ? COLOR_GOOD : (val < 150 ? COLOR_MID : COLOR_BAD);
-                case "mspt" -> (val < 30) ? COLOR_GOOD : (val < 45 ? COLOR_MID : COLOR_BAD);
-                case "tps" -> (val >= 19.5) ? COLOR_GOOD : (val >= 15 ? COLOR_MID : COLOR_BAD);
-                case "memory" -> {
-                    // Memory is tougher because we need the percentage
-                    PerformanceTracker tracker = PerformanceTracker.getInstance();
-                    double pct = (double) tracker.getUsedMemory() / tracker.getMaxMemory();
-                    yield (pct < 0.75) ? COLOR_GOOD : (pct < 0.9 ? COLOR_MID : COLOR_BAD);
+        int padding = 6;
+        int graphTop = bounds.y() + bounds.height() - GRAPH_HEIGHT - padding;
+        int graphLeft = bounds.x() + padding;
+        int graphWidth = bounds.width() - (padding * 2);
+        if (graphWidth < 2) {
+            return;
+        }
+        int graphHeight = GRAPH_HEIGHT;
+        int graphBottom = graphTop + graphHeight;
+
+        context.fill(graphLeft, graphTop, graphLeft + graphWidth, graphBottom, 0x18000000);
+        context.fill(graphLeft, graphTop, graphLeft + graphWidth, graphTop + 1, getDividerColor(activeConfig));
+
+        int maxValue = 60;
+        for (int value : values) {
+            maxValue = Math.max(maxValue, value);
+        }
+
+        double step = (values.length - 1) > 0 ? (double) graphWidth / (values.length - 1) : graphWidth;
+        for (int i = 1; i < values.length; i++) {
+            int previousX = graphLeft + (int) Math.round((i - 1) * step);
+            int currentX = graphLeft + (int) Math.round(i * step);
+
+            int previousY = graphBottom - 1 - (int) Math.round((values[i - 1] / (double) maxValue) * (graphHeight - 3));
+            int currentY = graphBottom - 1 - (int) Math.round((values[i] / (double) maxValue) * (graphHeight - 3));
+
+            drawLine(context, previousX, previousY, currentX, currentY, getGoodColor(activeConfig));
+        }
+    }
+
+    private static void drawLine(DrawContext context, int x0, int y0, int x1, int y1, int color) {
+        int dx = Math.abs(x1 - x0);
+        int dy = Math.abs(y1 - y0);
+        int steps = Math.max(dx, dy);
+        if (steps == 0) {
+            context.fill(x0, y0, x0 + 1, y0 + 1, color);
+            return;
+        }
+
+        for (int i = 0; i <= steps; i++) {
+            double progress = i / (double) steps;
+            int x = x0 + (int) Math.round((x1 - x0) * progress);
+            int y = y0 + (int) Math.round((y1 - y0) * progress);
+            context.fill(x, y, x + 1, y + 1, color);
+        }
+    }
+
+    private static LayoutBounds measureBounds(TextRenderer renderer, ModConfig activeConfig, List<OverlayLine> lines,
+            int screenWidth, int screenHeight) {
+        if (renderer == null) {
+            AnchorPoint fallbackAnchor = getAnchorPoint(screenWidth, screenHeight, 160, 48, activeConfig.appearance.position);
+            return new LayoutBounds(fallbackAnchor.x() + activeConfig.appearance.xOffset,
+                    fallbackAnchor.y() + activeConfig.appearance.yOffset, 160, 48);
+        }
+
+        int padding = 6;
+        int textWidth = 0;
+        int lineHeight = renderer.fontHeight + 2;
+        int lineCount = lines.size();
+
+        if (activeConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
+            for (int i = 0; i < lines.size(); i++) {
+                textWidth += measureLineWidth(renderer, lines.get(i));
+                if (i < lines.size() - 1) {
+                    textWidth += renderer.getWidth("|") + 12;
                 }
-                default -> COLOR_CLEAN_VALUE;
-            };
-        } catch (Exception e) {
-            return COLOR_CLEAN_VALUE;
+            }
+        } else {
+            for (OverlayLine line : lines) {
+                textWidth = Math.max(textWidth, measureLineWidth(renderer, line));
+            }
+        }
+
+        int graphHeight = activeConfig.hud.showGraph ? GRAPH_HEIGHT + 6 : 0;
+        int contentWidth = Math.max(textWidth, activeConfig.hud.showGraph ? 120 : 0);
+        int width = contentWidth + (padding * 2);
+        int height = (lineCount > 0 ? (lineHeight * Math.max(1, lineCount)) : lineHeight) + (padding * 2) + graphHeight;
+
+        AnchorPoint anchor = getAnchorPoint(screenWidth, screenHeight, width, height, activeConfig.appearance.position);
+        int x = anchor.x() + activeConfig.appearance.xOffset;
+        int y = anchor.y() + activeConfig.appearance.yOffset;
+        return new LayoutBounds(x, y, width, height);
+    }
+
+    private static int measureLineWidth(TextRenderer renderer, OverlayLine line) {
+        int width = renderer.getWidth(line.label()) + 4 + renderer.getWidth(line.value());
+        if (!line.unit().isEmpty()) {
+            width += 3 + renderer.getWidth(line.unit());
+        }
+        return width;
+    }
+
+    private static List<OverlayLine> prepareLines(ModConfig activeConfig, PerformanceTracker tracker, boolean preview) {
+        List<OverlayLine> lines = new ArrayList<>();
+        for (OverlayMetric metric : OverlayMetric.sanitizeOrder(activeConfig.hud.metricOrder)) {
+            if (!activeConfig.hud.isMetricEnabled(metric)) {
+                continue;
+            }
+
+            OverlayLine line = preview ? createPreviewLine(metric) : createLiveLine(activeConfig, tracker, metric);
+            if (line != null) {
+                lines.add(line);
+            }
+        }
+        return lines;
+    }
+
+    private static OverlayLine createLiveLine(ModConfig activeConfig, PerformanceTracker tracker, OverlayMetric metric) {
+        return switch (metric) {
+            case FPS -> new OverlayLine(metric, translated(metric.getLabelKey()),
+                    withMinMax(activeConfig, tracker.getCurrentFps(), tracker.getMinFps(), tracker.getMaxFps()),
+                    translated(metric.getUnitKey()), Double.valueOf(tracker.getCurrentFps()));
+            case AVG_FPS -> new OverlayLine(metric, translated(metric.getLabelKey()),
+                    WHOLE_NUMBER.get().format(tracker.getAverageFps()), translated(metric.getUnitKey()),
+                    tracker.getAverageFps());
+            case FRAME_TIME -> new OverlayLine(metric, translated(metric.getLabelKey()),
+                    ONE_DECIMAL.get().format(tracker.getCurrentFrameTimeMs()), translated(metric.getUnitKey()),
+                    tracker.getCurrentFrameTimeMs());
+            case LOW_1 -> new OverlayLine(metric, translated(metric.getLabelKey()),
+                    String.valueOf(tracker.getOnePercentLow()), translated(metric.getUnitKey()),
+                    Double.valueOf(tracker.getOnePercentLow()));
+            case MEMORY -> new OverlayLine(metric, translated(metric.getLabelKey()),
+                    tracker.getMaxMemory() > 0 ? ONE_DECIMAL.get().format(tracker.getUsedMemory() / (1024.0 * 1024.0 * 1024.0))
+                            : "N/A",
+                    translated(metric.getUnitKey()), tracker.getMaxMemory() > 0
+                            ? (tracker.getUsedMemory() * 100.0 / tracker.getMaxMemory())
+                            : null);
+            case CPU -> new OverlayLine(metric, translated(metric.getLabelKey()), formatPercent(tracker.getCurrentCpuUsage()),
+                    tracker.getCurrentCpuUsage() >= 0 ? translated(metric.getUnitKey()) : "", tracker.getCurrentCpuUsage());
+            case GPU -> new OverlayLine(metric, translated(metric.getLabelKey()), formatPercent(tracker.getCurrentGpuUsage()),
+                    tracker.getCurrentGpuUsage() >= 0 ? translated(metric.getUnitKey()) : "", tracker.getCurrentGpuUsage());
+            case PING -> new OverlayLine(metric, translated(metric.getLabelKey()),
+                    withMinMax(activeConfig, tracker.getCurrentPing(), tracker.getMinPing(), tracker.getMaxPing()),
+                    translated(metric.getUnitKey()), Double.valueOf(tracker.getCurrentPing()));
+            case MSPT -> new OverlayLine(metric, translated(metric.getLabelKey()),
+                    ONE_DECIMAL.get().format(tracker.getMspt()), translated(metric.getUnitKey()), tracker.getMspt());
+            case TPS -> new OverlayLine(metric, translated(metric.getLabelKey()),
+                    ONE_DECIMAL.get().format(tracker.getTps()), translated(metric.getUnitKey()), tracker.getTps());
+            case CHUNKS -> new OverlayLine(metric, translated(metric.getLabelKey()),
+                    tracker.getVisibleChunks() > 0
+                            ? tracker.getCompletedChunks() + "/" + tracker.getVisibleChunks()
+                            : String.valueOf(tracker.getLoadedChunks()),
+                    "", tracker.getVisibleChunks() > 0
+                            ? (tracker.getCompletedChunks() * 100.0 / tracker.getVisibleChunks())
+                            : null);
+            case COORDS -> new OverlayLine(metric, translated(metric.getLabelKey()), tracker.getCoordinatesText(), "", null);
+            case BIOME -> new OverlayLine(metric, translated(metric.getLabelKey()), tracker.getBiomeText(), "", null);
+        };
+    }
+
+    private static OverlayLine createPreviewLine(OverlayMetric metric) {
+        return switch (metric) {
+            case FPS -> new OverlayLine(metric, translated(metric.getLabelKey()), "144", translated(metric.getUnitKey()),
+                    144.0);
+            case AVG_FPS -> new OverlayLine(metric, translated(metric.getLabelKey()), "138", translated(metric.getUnitKey()),
+                    138.0);
+            case FRAME_TIME -> new OverlayLine(metric, translated(metric.getLabelKey()), "6.9", translated(metric.getUnitKey()),
+                    6.9);
+            case LOW_1 -> new OverlayLine(metric, translated(metric.getLabelKey()), "92", translated(metric.getUnitKey()),
+                    92.0);
+            case MEMORY -> new OverlayLine(metric, translated(metric.getLabelKey()), "3.4", translated(metric.getUnitKey()),
+                    58.0);
+            case CPU -> new OverlayLine(metric, translated(metric.getLabelKey()), "34", translated(metric.getUnitKey()), 34.0);
+            case GPU -> new OverlayLine(metric, translated(metric.getLabelKey()), "67", translated(metric.getUnitKey()), 67.0);
+            case PING -> new OverlayLine(metric, translated(metric.getLabelKey()), "42", translated(metric.getUnitKey()), 42.0);
+            case MSPT -> new OverlayLine(metric, translated(metric.getLabelKey()), "18.7", translated(metric.getUnitKey()),
+                    18.7);
+            case TPS -> new OverlayLine(metric, translated(metric.getLabelKey()), "20.0", translated(metric.getUnitKey()),
+                    20.0);
+            case CHUNKS -> new OverlayLine(metric, translated(metric.getLabelKey()), "324/361", "", 90.0);
+            case COORDS -> new OverlayLine(metric, translated(metric.getLabelKey()), "128 64 -52", "", null);
+            case BIOME -> new OverlayLine(metric, translated(metric.getLabelKey()), "Plains", "", null);
+        };
+    }
+
+    private static String withMinMax(ModConfig activeConfig, int current, int min, int max) {
+        if (!activeConfig.hud.showMinMaxStats) {
+            return String.valueOf(current);
+        }
+        return current + " (" + min + "/" + max + ")";
+    }
+
+    private static String formatPercent(double value) {
+        if (value < 0) {
+            return "N/A";
+        }
+        return WHOLE_NUMBER.get().format(value);
+    }
+
+    private static String translated(String key) {
+        return key == null || key.isEmpty() ? "" : Text.translatable(key).getString();
+    }
+
+    private static void drawStyledText(DrawContext context, TextRenderer renderer, ModConfig activeConfig, String text,
+            int x, int y, int color) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+
+        ModConfig.TextEffect effect = activeConfig != null ? activeConfig.appearance.textEffect : ModConfig.TextEffect.NONE;
+        switch (effect) {
+            case SHADOW -> context.drawTextWithShadow(renderer, text, x, y, color);
+            case OUTLINE -> {
+                int outlineColor = 0xD0000000;
+                context.drawText(renderer, text, x - 1, y, outlineColor, false);
+                context.drawText(renderer, text, x + 1, y, outlineColor, false);
+                context.drawText(renderer, text, x, y - 1, outlineColor, false);
+                context.drawText(renderer, text, x, y + 1, outlineColor, false);
+                context.drawText(renderer, text, x, y, color, false);
+            }
+            case NONE -> context.drawText(renderer, text, x, y, color, false);
         }
     }
 
-    private static void renderScaledText(DrawContext ctx, TextRenderer renderer, String text, int x, int y, int color,
-            float scale, boolean shadow) {
-        Object matricesRaw = ctx.getMatrices();
-        if (matricesRaw instanceof MatrixStack matrices) {
+    private static int getAdaptiveColor(ModConfig activeConfig, OverlayLine line) {
+        if (!activeConfig.appearance.adaptiveColors || line.adaptiveValue() == null) {
+            return getValueColor(activeConfig);
+        }
+
+        double value = line.adaptiveValue();
+        return switch (line.metric()) {
+            case FPS, AVG_FPS, LOW_1 -> value >= 60 ? getGoodColor(activeConfig)
+                    : value >= 30 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case FRAME_TIME, MSPT -> value < 16.7 ? getGoodColor(activeConfig)
+                    : value < 33.3 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case MEMORY, CPU, GPU, CHUNKS -> value < 75 ? getGoodColor(activeConfig)
+                    : value < 90 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case PING -> value < 60 ? getGoodColor(activeConfig)
+                    : value < 150 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case TPS -> value >= 19.5 ? getGoodColor(activeConfig)
+                    : value >= 15 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case COORDS, BIOME -> getValueColor(activeConfig);
+        };
+    }
+
+    private static int getBackgroundColor(ModConfig activeConfig) {
+        return ((activeConfig.appearance.backgroundOpacity & 0xFF) << 24)
+                | (activeConfig.appearance.backgroundColor & 0xFFFFFF);
+    }
+
+    private static int getLabelColor(ModConfig activeConfig) {
+        return activeConfig.appearance.labelColor;
+    }
+
+    private static int getValueColor(ModConfig activeConfig) {
+        return activeConfig.appearance.valueColor;
+    }
+
+    private static int getUnitColor(ModConfig activeConfig) {
+        return activeConfig.appearance.unitColor;
+    }
+
+    private static int getDividerColor(ModConfig activeConfig) {
+        return activeConfig.appearance.dividerColor;
+    }
+
+    private static int getGoodColor(ModConfig activeConfig) {
+        return activeConfig.appearance.goodColor;
+    }
+
+    private static int getWarningColor(ModConfig activeConfig) {
+        return activeConfig.appearance.warningColor;
+    }
+
+    private static int getBadColor(ModConfig activeConfig) {
+        return activeConfig.appearance.badColor;
+    }
+
+    private static int[] getPreviewGraphValues() {
+        return new int[] { 120, 144, 140, 138, 147, 145, 141, 130, 136, 142, 144, 139, 148, 150, 143, 140, 137, 145,
+                149, 146, 142, 141, 147, 144 };
+    }
+
+    private static void applyScale(DrawContext context, float scale, Runnable renderer) {
+        Object rawMatrices = context.getMatrices();
+        if (rawMatrices instanceof MatrixStack matrices) {
             matrices.push();
-            matrices.translate(x, y + 2.5f, 0);
             matrices.scale(scale, scale, 1.0f);
-            ctx.drawText(renderer, text, 0, 0, color, shadow);
+            renderer.run();
             matrices.pop();
-        } else if (matricesRaw instanceof Matrix3x2fStack matrices) {
+        } else if (rawMatrices instanceof Matrix3x2fStack matrices) {
             matrices.pushMatrix();
-            matrices.translate(x, y + 2.5f);
             matrices.scale(scale, scale);
-            ctx.drawText(renderer, text, 0, 0, color, shadow);
+            renderer.run();
             matrices.popMatrix();
         } else {
-            ctx.drawText(renderer, text, x, y, color, shadow);
+            renderer.run();
         }
     }
 
-    // Helper to draw background rectangles with rounded corners
-    private static void drawRoundedRect(DrawContext ctx, int x, int y, int width, int height, int radius, int color) {
-        ctx.fill(x + radius, y, x + width - radius, y + height, color);
-        ctx.fill(x, y + radius, x + radius, y + height - radius, color);
-        ctx.fill(x + width - radius, y + radius, x + width, y + height - radius, color);
+    private static void drawRoundedRect(DrawContext context, int x, int y, int width, int height, int radius, int color) {
+        context.fill(x + radius, y, x + width - radius, y + height, color);
+        context.fill(x, y + radius, x + radius, y + height - radius, color);
+        context.fill(x + width - radius, y + radius, x + width, y + height - radius, color);
 
-        drawCorner(ctx, x, y, radius, radius, true, true, color);
-        drawCorner(ctx, x + width - radius, y, radius, radius, false, true, color);
-        drawCorner(ctx, x, y + height - radius, radius, radius, true, false, color);
-        drawCorner(ctx, x + width - radius, y + height - radius, radius, radius, false, false, color);
+        drawCorner(context, x, y, radius, radius, true, true, color);
+        drawCorner(context, x + width - radius, y, radius, radius, false, true, color);
+        drawCorner(context, x, y + height - radius, radius, radius, true, false, color);
+        drawCorner(context, x + width - radius, y + height - radius, radius, radius, false, false, color);
     }
 
-    private static void drawCorner(DrawContext ctx, int x, int y, int w, int h, boolean left, boolean top, int color) {
-        for (int i = 0; i < w; i++) {
-            for (int j = 0; j < h; j++) {
-                int dx = left ? (w - 1 - i) : i;
-                int dy = top ? (h - 1 - j) : j;
-                if (dx * dx + dy * dy <= w * w) {
-                    ctx.fill(x + i, y + j, x + i + 1, y + j + 1, color);
+    private static void drawCorner(DrawContext context, int x, int y, int width, int height, boolean left, boolean top,
+            int color) {
+        for (int i = 0; i < width; i++) {
+            for (int j = 0; j < height; j++) {
+                int dx = left ? (width - 1 - i) : i;
+                int dy = top ? (height - 1 - j) : j;
+                if (dx * dx + dy * dy <= width * width) {
+                    context.fill(x + i, y + j, x + i + 1, y + j + 1, color);
                 }
             }
         }
     }
 
-    private static String getLabelForType(String type) {
-        return switch (type) {
-            case "fps" -> "Fps";
-            case "avg" -> "Avg";
-            case "low" -> "1%Low";
-            case "memory" -> "Mem";
-            case "ping" -> "Ping";
-            case "mspt" -> "Mspt";
-            case "tps" -> "Tps";
-            default -> "";
-        };
+    private record OverlayLine(OverlayMetric metric, String label, String value, String unit, Double adaptiveValue) {
     }
 
-    private static String getUnitForType(String type) {
-        return switch (type) {
-            case "fps", "avg", "low", "1%low" -> " fps";
-            case "memory" -> " gb";
-            case "ping" -> " ms";
-            case "mspt" -> " ms";
-            case "tps" -> " tps";
-            default -> "";
-        };
-    }
-
-    private static int calculateX(int screenWidth, int totalWidth) {
-        int margin = 4;
-        return switch (config.appearance.position) {
-            case TOP_LEFT, BOTTOM_LEFT -> margin;
-            case TOP_RIGHT, BOTTOM_RIGHT -> screenWidth - totalWidth - margin;
-            case TOP_CENTER -> (screenWidth - totalWidth) / 2;
-        };
-    }
-
-    private static int calculateY(int screenHeight, int totalHeight) {
-        int margin = 4;
-        return switch (config.appearance.position) {
-            case TOP_LEFT, TOP_RIGHT, TOP_CENTER -> margin;
-            case BOTTOM_LEFT, BOTTOM_RIGHT -> screenHeight - totalHeight - margin;
-        };
-    }
-
-    // Inner classes
-    // Helper structure for rendering lines
-    private static class OverlayLine {
-        final List<TextPart> parts = new ArrayList<>(5);
-        String type = "";
-
-        void reset() {
-            parts.clear();
-            type = "";
-        }
-
-        void addPart(Text text) {
-            parts.add(new TextPart(text));
+    public record LayoutBounds(int x, int y, int width, int height) {
+        public boolean contains(double mouseX, double mouseY) {
+            return mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height;
         }
     }
 
-    private static class TextPart {
-        final Text text;
-
-        TextPart(Text text) {
-            this.text = text;
-        }
+    public record AnchorPoint(int x, int y) {
     }
 }

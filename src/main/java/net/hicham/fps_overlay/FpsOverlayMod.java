@@ -2,34 +2,38 @@ package net.hicham.fps_overlay;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.option.KeyBinding;
-
+import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.lwjgl.glfw.GLFW;
 
-
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class FpsOverlayMod implements ClientModInitializer {
     public static final Logger LOGGER = LogManager.getLogger("FpsOverlay");
-    private ModConfig config;
+    private static final KeyBinding.Category KEY_CATEGORY = KeyBinding.Category
+            .create(Identifier.of("fps_overlay", "keys"));
 
-    private KeyBinding[] keyBindings;
-
-    // State management
     private final AtomicBoolean modInitialized = new AtomicBoolean(false);
-    private final Object INIT_LOCK = new Object();
+    private final Object initLock = new Object();
+    private final List<KeyBindingAction> keyBindingActions = new ArrayList<>();
+
+    private ModConfig config;
 
     @Override
     public void onInitializeClient() {
         LOGGER.info("Initializing Fps Overlay...");
 
-        synchronized (INIT_LOCK) {
+        synchronized (initLock) {
             if (modInitialized.get()) {
                 LOGGER.warn("Mod already initialized");
                 return;
@@ -44,12 +48,10 @@ public class FpsOverlayMod implements ClientModInitializer {
 
                 registerKeyBindings();
                 registerEventListeners();
-
                 ConfigManager.registerConfigListener(this::onConfigChanged);
 
                 modInitialized.set(true);
                 LOGGER.info("Fps Overlay initialized successfully");
-
             } catch (Exception e) {
                 LOGGER.error("Failed to initialize Fps Overlay", e);
                 modInitialized.set(false);
@@ -58,55 +60,74 @@ public class FpsOverlayMod implements ClientModInitializer {
     }
 
     private void onConfigChanged() {
-        if (!modInitialized.get())
+        if (!modInitialized.get()) {
             return;
+        }
 
-        LOGGER.debug("Configuration changed - reloading settings");
-        try {
-            config = ConfigManager.getConfig();
+        config = ConfigManager.getConfig();
+        PerformanceTracker.getInstance().setConfig(config);
+        OverlayRenderer.setConfig(config);
 
-            PerformanceTracker.getInstance().setConfig(config);
-            OverlayRenderer.setConfig(config);
-
-            // Re-register keybindings if enableKeybindings changed
-            if (keyBindings != null && !config.general.enableKeybindings) {
-                keyBindings = null;
-            } else if (keyBindings == null && config.general.enableKeybindings) {
-                registerKeyBindings();
-            }
-
-            if (!config.hud.showAverageFps) {
-                PerformanceTracker.getInstance().clearAverageFpsData();
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to handle config change", e);
+        if (!config.hud.showAverageFps) {
+            PerformanceTracker.getInstance().clearAverageFpsData();
         }
     }
 
     private void registerKeyBindings() {
-        LOGGER.debug("Keybindings registration skipped (not implemented)");
+        if (!keyBindingActions.isEmpty()) {
+            return;
+        }
+
+        registerKeyBinding("toggle_overlay", GLFW.GLFW_KEY_O, this::toggleOverlay);
+        registerKeyBinding("toggle_fps", GLFW.GLFW_KEY_F8, () -> toggleMetric(OverlayMetric.FPS));
+        registerKeyBinding("toggle_frame_time", GLFW.GLFW_KEY_F9, () -> toggleMetric(OverlayMetric.FRAME_TIME));
+        registerKeyBinding("toggle_memory", GLFW.GLFW_KEY_F10, () -> toggleMetric(OverlayMetric.MEMORY));
+        registerKeyBinding("toggle_ping", GLFW.GLFW_KEY_F11, () -> toggleMetric(OverlayMetric.PING));
+        registerKeyBinding("toggle_coords", GLFW.GLFW_KEY_F7, () -> toggleMetric(OverlayMetric.COORDS));
+        registerKeyBinding("toggle_graph", GLFW.GLFW_KEY_F5, () -> toggleBooleanMetric(
+                () -> config.hud.showGraph,
+                value -> config.hud.showGraph = value,
+                "Graph"));
+        registerKeyBinding("open_config", GLFW.GLFW_KEY_P, () -> openConfig(MinecraftClient.getInstance()));
+        registerKeyBinding("open_position_editor", GLFW.GLFW_KEY_F6,
+                () -> openPositionEditor(MinecraftClient.getInstance()));
+        registerKeyBinding("reset_stats", GLFW.GLFW_KEY_F4, this::resetStatistics);
+    }
+
+    private void registerKeyBinding(String id, int defaultKey, Runnable action) {
+        KeyBinding binding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.fps_overlay." + id,
+                InputUtil.Type.KEYSYM,
+                defaultKey,
+                KEY_CATEGORY));
+        keyBindingActions.add(new KeyBindingAction(binding, action));
     }
 
     @SuppressWarnings("deprecation")
     private void registerEventListeners() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (!modInitialized.get() || client.player == null)
+            if (!modInitialized.get()) {
                 return;
+            }
 
-            PerformanceTracker.getInstance().update(client);
+            if (client.player != null) {
+                PerformanceTracker.getInstance().update(client);
+            }
 
-            if (config.general.enableKeybindings && keyBindings != null) {
-                handleKeyBindings(client);
+            if (config.general.enableKeybindings) {
+                handleKeyBindings();
             }
         });
 
-        HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
-            if (!shouldRenderOverlay())
+        HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
+            if (!shouldRenderOverlay()) {
                 return;
+            }
 
             MinecraftClient client = MinecraftClient.getInstance();
-            if (client == null || client.textRenderer == null)
+            if (client == null || client.textRenderer == null) {
                 return;
+            }
 
             OverlayRenderer.render(drawContext, client);
         });
@@ -114,99 +135,95 @@ public class FpsOverlayMod implements ClientModInitializer {
 
     private boolean shouldRenderOverlay() {
         MinecraftClient client = MinecraftClient.getInstance();
-        return modInitialized.get() &&
-                config != null &&
-                config.general.enabled &&
-                client != null &&
-                client.player != null &&
-                client.world != null &&
-                client.textRenderer != null &&
-                !client.options.hudHidden;
+        return modInitialized.get()
+                && config != null
+                && config.general.enabled
+                && client != null
+                && client.player != null
+                && client.world != null
+                && client.textRenderer != null
+                && !client.options.hudHidden;
     }
 
-    private void handleKeyBindings(MinecraftClient client) {
-        if (keyBindings == null || client.player == null)
-            return;
-
-        try {
-            if (keyBindings[0].wasPressed())
-                toggleOverlay();
-            if (keyBindings[1].wasPressed())
-                toggleFps();
-            if (keyBindings[2].wasPressed())
-                toggleMemory();
-            if (keyBindings[3].wasPressed())
-                togglePing();
-            if (keyBindings[4].wasPressed())
-                openConfig(client);
-            if (keyBindings[5].wasPressed())
-                resetStatistics(client);
-            if (keyBindings[6].wasPressed())
-                toggleAverageFps();
-        } catch (Exception e) {
-            LOGGER.error("Error handling keybindings", e);
+    private void handleKeyBindings() {
+        for (KeyBindingAction keyBindingAction : keyBindingActions) {
+            while (keyBindingAction.binding().wasPressed()) {
+                try {
+                    keyBindingAction.action().run();
+                } catch (Exception e) {
+                    LOGGER.error("Error handling keybinding {}", keyBindingAction.binding().getId(), e);
+                }
+            }
         }
     }
 
     private void toggleOverlay() {
         config.general.enabled = !config.general.enabled;
         ConfigManager.saveConfig();
-        sendToggleMessage("Overlay", config.general.enabled);
+        sendInfoMessage("Overlay " + enabledText(config.general.enabled));
     }
 
-    private void toggleFps() {
-        config.hud.showFps = !config.hud.showFps;
+    private void toggleMetric(OverlayMetric metric) {
+        boolean enabled = !config.hud.isMetricEnabled(metric);
+        config.hud.setMetricEnabled(metric, enabled);
         ConfigManager.saveConfig();
-        sendToggleMessage("FPS Display", config.hud.showFps);
+        sendInfoMessage(Text.translatable(metric.getLabelKey()).getString() + " " + enabledText(enabled));
     }
 
-    private void toggleMemory() {
-        config.hud.showMemory = !config.hud.showMemory;
+    private void toggleBooleanMetric(BooleanSupplier getter, BooleanConsumer setter, String label) {
+        boolean enabled = !getter.getAsBoolean();
+        setter.accept(enabled);
         ConfigManager.saveConfig();
-        sendToggleMessage("Memory Display", config.hud.showMemory);
-    }
-
-    private void togglePing() {
-        config.hud.showPing = !config.hud.showPing;
-        ConfigManager.saveConfig();
-        sendToggleMessage("Ping Display", config.hud.showPing);
-    }
-
-    private void toggleAverageFps() {
-        config.hud.showAverageFps = !config.hud.showAverageFps;
-        ConfigManager.saveConfig();
-        sendToggleMessage("Average FPS Display", config.hud.showAverageFps);
-
-        if (!config.hud.showAverageFps) {
-            PerformanceTracker.getInstance().clearAverageFpsData();
-        }
+        sendInfoMessage(label + " " + enabledText(enabled));
     }
 
     private void openConfig(MinecraftClient client) {
-        if (client != null) {
-            try {
-                Screen configScreen = ConfigScreenFactory.createConfigScreen(client.currentScreen);
-                client.setScreen(configScreen);
-            } catch (Exception e) {
-                LOGGER.error("Failed to open config screen", e);
-            }
+        if (client == null) {
+            return;
+        }
+
+        try {
+            Screen configScreen = ConfigScreenFactory.createConfigScreen(client.currentScreen);
+            client.setScreen(configScreen);
+        } catch (Exception e) {
+            LOGGER.error("Failed to open config screen", e);
         }
     }
 
-    private void resetStatistics(MinecraftClient client) {
-        PerformanceTracker.getInstance().clearAverageFpsData();
-        if (client != null && client.player != null) {
-            client.player.sendMessage(Text.literal("§7[§6FpsOverlay§7] §fStatistics reset"), false);
+    private void openPositionEditor(MinecraftClient client) {
+        if (client == null) {
+            return;
         }
+
+        client.setScreen(new PositionEditorScreen(client.currentScreen, ConfigManager.getConfig()));
     }
 
-    @SuppressWarnings("null")
-    private void sendToggleMessage(String feature, boolean enabled) {
+    private void resetStatistics() {
+        PerformanceTracker.getInstance().resetSessionStats();
+        sendInfoMessage("Session statistics reset");
+    }
+
+    private void sendInfoMessage(String message) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client != null && client.player != null) {
-            String status = enabled ? "§aENABLED" : "§cDISABLED";
-            String message = String.format("§7[§6FpsOverlay§7] §f%s §7is now %s", feature, status);
-            client.player.sendMessage(Text.literal(message), true);
+            client.player.sendMessage(Text.literal("[FpsOverlay] " + message), true);
         }
+    }
+
+    private String enabledText(boolean enabled) {
+        return enabled ? "enabled" : "disabled";
+    }
+
+    private record KeyBindingAction(KeyBinding binding, Runnable action) {
+    }
+
+    @FunctionalInterface
+    private interface BooleanSupplier {
+        boolean getAsBoolean();
+    }
+
+    @FunctionalInterface
+    private interface BooleanConsumer {
+        void accept(boolean value);
     }
 }
