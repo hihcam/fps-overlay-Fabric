@@ -5,6 +5,7 @@
   "category.fps_overlay.appearance": "Appearance",
   "category.fps_overlay.colors": "Colors",
   "category.fps_overlay.keys": "FPS Overlay",
+  "key.category.fps_overlay.keys": "FPS Overlay",
   "option.fps_overlay.enabled": "Enable Overlay",
   "option.fps_overlay.enableKeybindings": "Enable Keybindings",
   "option.fps_overlay.updateInterval": "Update Interval",

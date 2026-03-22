@@ -108,7 +108,8 @@ public class OverlayRenderer {
 
         int screenWidth = (int) (context.getScaledWindowWidth() / activeConfig.appearance.hudScale);
         int screenHeight = (int) (context.getScaledWindowHeight() / activeConfig.appearance.hudScale);
-        LayoutBounds bounds = measureBounds(renderer, activeConfig, lines, screenWidth, screenHeight);
+        OverlayLayout layout = measureLayout(renderer, activeConfig, lines, screenWidth, screenHeight);
+        LayoutBounds bounds = layout.bounds();
 
         if (activeConfig.appearance.showBackground) {
             drawRoundedRect(context, bounds.x(), bounds.y(), bounds.width(), bounds.height(), 4,
@@ -116,7 +117,7 @@ public class OverlayRenderer {
         }
 
         if (activeConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
-            renderNavbar(context, renderer, activeConfig, lines, bounds);
+            renderNavbar(context, renderer, activeConfig, layout.navbarRows(), bounds);
         } else {
             renderVertical(context, renderer, activeConfig, lines, bounds);
         }
@@ -128,30 +129,36 @@ public class OverlayRenderer {
     }
 
     private static void renderNavbar(DrawContext context, TextRenderer renderer, ModConfig activeConfig,
-            List<OverlayLine> lines, LayoutBounds bounds) {
+            List<NavbarRow> rows, LayoutBounds bounds) {
         int padding = 6;
-        int currentX = bounds.x() + padding;
-        int textY = bounds.y() + 4;
+        int lineHeight = renderer.fontHeight + 2;
 
-        for (int i = 0; i < lines.size(); i++) {
-            OverlayLine line = lines.get(i);
-            drawStyledText(context, renderer, activeConfig, line.label(), currentX, textY, getLabelColor(activeConfig));
-            currentX += renderer.getWidth(line.label()) + 4;
+        for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+            NavbarRow row = rows.get(rowIndex);
+            int currentX = bounds.x() + padding;
+            int textY = bounds.y() + padding + (rowIndex * lineHeight);
 
-            drawStyledText(context, renderer, activeConfig, line.value(), currentX, textY,
-                    getAdaptiveColor(activeConfig, line));
-            currentX += renderer.getWidth(line.value());
+            for (int i = 0; i < row.lines().size(); i++) {
+                OverlayLine line = row.lines().get(i);
+                drawStyledText(context, renderer, activeConfig, line.label(), currentX, textY, getLabelColor(activeConfig));
+                currentX += renderer.getWidth(line.label()) + 4;
 
-            if (!line.unit().isEmpty()) {
-                currentX += 3;
-                drawStyledText(context, renderer, activeConfig, line.unit(), currentX, textY, getUnitColor(activeConfig));
-                currentX += renderer.getWidth(line.unit());
-            }
+                drawStyledText(context, renderer, activeConfig, line.value(), currentX, textY,
+                        getAdaptiveColor(activeConfig, line));
+                currentX += renderer.getWidth(line.value());
 
-            if (i < lines.size() - 1) {
-                currentX += 6;
-                drawStyledText(context, renderer, activeConfig, "|", currentX, textY, getDividerColor(activeConfig));
-                currentX += renderer.getWidth("|") + 6;
+                if (!line.unit().isEmpty()) {
+                    currentX += 3;
+                    drawStyledText(context, renderer, activeConfig, line.unit(), currentX, textY,
+                            getUnitColor(activeConfig));
+                    currentX += renderer.getWidth(line.unit());
+                }
+
+                if (i < row.lines().size() - 1) {
+                    currentX += 6;
+                    drawStyledText(context, renderer, activeConfig, "|", currentX, textY, getDividerColor(activeConfig));
+                    currentX += renderer.getWidth("|") + 6;
+                }
             }
         }
     }
@@ -234,23 +241,31 @@ public class OverlayRenderer {
 
     private static LayoutBounds measureBounds(TextRenderer renderer, ModConfig activeConfig, List<OverlayLine> lines,
             int screenWidth, int screenHeight) {
+        return measureLayout(renderer, activeConfig, lines, screenWidth, screenHeight).bounds();
+    }
+
+    private static OverlayLayout measureLayout(TextRenderer renderer, ModConfig activeConfig, List<OverlayLine> lines,
+            int screenWidth, int screenHeight) {
         if (renderer == null) {
             AnchorPoint fallbackAnchor = getAnchorPoint(screenWidth, screenHeight, 160, 48, activeConfig.appearance.position);
-            return new LayoutBounds(fallbackAnchor.x() + activeConfig.appearance.xOffset,
-                    fallbackAnchor.y() + activeConfig.appearance.yOffset, 160, 48);
+            return new OverlayLayout(
+                    new LayoutBounds(fallbackAnchor.x() + activeConfig.appearance.xOffset,
+                            fallbackAnchor.y() + activeConfig.appearance.yOffset, 160, 48),
+                    List.of());
         }
 
         int padding = 6;
         int textWidth = 0;
         int lineHeight = renderer.fontHeight + 2;
         int lineCount = lines.size();
+        List<NavbarRow> navbarRows = List.of();
 
         if (activeConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
-            for (int i = 0; i < lines.size(); i++) {
-                textWidth += measureLineWidth(renderer, lines.get(i));
-                if (i < lines.size() - 1) {
-                    textWidth += renderer.getWidth("|") + 12;
-                }
+            int maxContentWidth = Math.max(40, screenWidth - 8 - (padding * 2));
+            navbarRows = layoutNavbarRows(renderer, lines, maxContentWidth);
+            lineCount = Math.max(1, navbarRows.size());
+            for (NavbarRow row : navbarRows) {
+                textWidth = Math.max(textWidth, row.width());
             }
         } else {
             for (OverlayLine line : lines) {
@@ -261,12 +276,47 @@ public class OverlayRenderer {
         int graphHeight = activeConfig.hud.showGraph ? GRAPH_HEIGHT + 6 : 0;
         int contentWidth = Math.max(textWidth, activeConfig.hud.showGraph ? 120 : 0);
         int width = contentWidth + (padding * 2);
-        int height = (lineCount > 0 ? (lineHeight * Math.max(1, lineCount)) : lineHeight) + (padding * 2) + graphHeight;
+        int contentHeight = activeConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR
+                ? (lineHeight * Math.max(1, lineCount))
+                : (lineCount > 0 ? (lineHeight * Math.max(1, lineCount)) : lineHeight);
+        int height = contentHeight + (padding * 2) + graphHeight;
 
         AnchorPoint anchor = getAnchorPoint(screenWidth, screenHeight, width, height, activeConfig.appearance.position);
         int x = anchor.x() + activeConfig.appearance.xOffset;
         int y = anchor.y() + activeConfig.appearance.yOffset;
-        return new LayoutBounds(x, y, width, height);
+        return new OverlayLayout(new LayoutBounds(x, y, width, height), navbarRows);
+    }
+
+    private static List<NavbarRow> layoutNavbarRows(TextRenderer renderer, List<OverlayLine> lines, int maxContentWidth) {
+        List<NavbarRow> rows = new ArrayList<>();
+        if (lines.isEmpty()) {
+            return rows;
+        }
+
+        int separatorWidth = renderer.getWidth("|") + 12;
+        List<OverlayLine> currentRow = new ArrayList<>();
+        int currentWidth = 0;
+
+        for (OverlayLine line : lines) {
+            int lineWidth = measureLineWidth(renderer, line);
+            int additionalWidth = currentRow.isEmpty() ? lineWidth : separatorWidth + lineWidth;
+
+            if (!currentRow.isEmpty() && currentWidth + additionalWidth > maxContentWidth) {
+                rows.add(new NavbarRow(List.copyOf(currentRow), currentWidth));
+                currentRow.clear();
+                currentWidth = 0;
+                additionalWidth = lineWidth;
+            }
+
+            currentRow.add(line);
+            currentWidth += additionalWidth;
+        }
+
+        if (!currentRow.isEmpty()) {
+            rows.add(new NavbarRow(List.copyOf(currentRow), currentWidth));
+        }
+
+        return rows;
     }
 
     private static int measureLineWidth(TextRenderer renderer, OverlayLine line) {
@@ -500,6 +550,12 @@ public class OverlayRenderer {
     }
 
     private record OverlayLine(OverlayMetric metric, String label, String value, String unit, Double adaptiveValue) {
+    }
+
+    private record NavbarRow(List<OverlayLine> lines, int width) {
+    }
+
+    private record OverlayLayout(LayoutBounds bounds, List<NavbarRow> navbarRows) {
     }
 
     public record LayoutBounds(int x, int y, int width, int height) {

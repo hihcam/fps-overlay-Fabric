@@ -24,6 +24,8 @@ public class PerformanceTracker {
     private long maxMemory = 0;
     private double currentCpuUsage = -1;
     private double currentGpuUsage = -1;
+    private boolean hasSeenRealGpuSample = false;
+    private int consecutiveZeroGpuSamples = 0;
     private int currentPing = 0;
     private int onePercentLow = 0;
     private double currentMspt = 0;
@@ -154,9 +156,29 @@ public class PerformanceTracker {
     }
 
     private double fetchGpuUsage(MinecraftClient client) {
+        double windowsGpuUsage = WindowsGpuUsagePoller.getInstance().getCurrentUtilization();
+        if (windowsGpuUsage >= 0) {
+            hasSeenRealGpuSample = true;
+            consecutiveZeroGpuSamples = 0;
+            return windowsGpuUsage;
+        }
+
         try {
             double utilization = client.getGpuUtilizationPercentage();
-            return utilization >= 0 && utilization <= 100.0 ? utilization : -1;
+            if (Double.isNaN(utilization) || Double.isInfinite(utilization) || utilization < 0) {
+                consecutiveZeroGpuSamples = 0;
+                return -1;
+            }
+
+            double clamped = Math.min(100.0, utilization);
+            if (clamped > 0) {
+                hasSeenRealGpuSample = true;
+                consecutiveZeroGpuSamples = 0;
+                return clamped;
+            }
+
+            consecutiveZeroGpuSamples++;
+            return hasSeenRealGpuSample || consecutiveZeroGpuSamples < 8 ? 0 : -1;
         } catch (Exception e) {
             return -1;
         }
@@ -274,6 +296,7 @@ public class PerformanceTracker {
         maxFps = 0;
         minPing = Integer.MAX_VALUE;
         maxPing = 0;
+        consecutiveZeroGpuSamples = 0;
     }
 
     public int[] copyGraphValues() {

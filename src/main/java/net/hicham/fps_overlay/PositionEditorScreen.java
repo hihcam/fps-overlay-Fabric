@@ -56,6 +56,11 @@ public class PositionEditorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
+        boolean handledByWidget = super.mouseClicked(click, doubled);
+        if (handledByWidget) {
+            return true;
+        }
+
         if (click.button() == 0) {
             OverlayRenderer.LayoutBounds bounds = OverlayRenderer.getPreviewBounds(this.width, this.height, config);
             if (bounds.contains(click.x(), click.y())) {
@@ -67,7 +72,7 @@ public class PositionEditorScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(click, doubled);
+        return false;
     }
 
     @Override
@@ -109,12 +114,11 @@ public class PositionEditorScreen extends Screen {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         context.fillGradient(0, 0, this.width, this.height, 0xC0182028, 0xD010141A);
+        OverlayRenderer.renderPreview(context, client, config, this.width, this.height);
         super.render(context, mouseX, mouseY, delta);
 
         context.drawCenteredTextWithShadow(textRenderer, title, this.width / 2, 48, 0xFFFFFFFF);
         context.drawCenteredTextWithShadow(textRenderer, Text.translatable("text.fps_overlay.position_editor_hint"),
                 this.width / 2, 62, 0xFFB7C6D1);
-
-        OverlayRenderer.renderPreview(context, client, config, this.width, this.height);
     }
 }
