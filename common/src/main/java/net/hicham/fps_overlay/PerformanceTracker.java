@@ -1,16 +1,6 @@
 package net.hicham.fps_overlay;
 
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-import com.sun.management.OperatingSystemMXBean;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-
-import java.lang.management.ManagementFactory;
-import java.util.Arrays;
-=======
 import net.minecraft.client.Minecraft;
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
 
 /**
  * Platform-agnostic performance tracking. Uses Mojang mappings.
@@ -25,10 +15,7 @@ public class PerformanceTracker {
 
     private ModConfig config;
 
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-=======
     // Performance data
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
     private int currentFps = 0;
     private double currentFrameTimeMs = 0;
     private long usedMemory = 0;
@@ -77,16 +64,9 @@ public class PerformanceTracker {
         this.config = config;
     }
 
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-    public void update(MinecraftClient client) {
-        if (config == null) {
-            return;
-        }
-=======
     // Periodic update logic
     public void update(Minecraft client) {
         if (config == null) return;
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
 
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastUpdateTime < config.general.updateIntervalMs) {
@@ -94,31 +74,16 @@ public class PerformanceTracker {
         }
         lastUpdateTime = currentTime;
 
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-        this.currentFps = Math.max(0, client.getCurrentFps());
-=======
         // 1. Update Core Data (FPS, Ping, 1% Low)
         this.currentFps = Math.max(0, client.getFps());
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
         this.averageFps = calculateAverageFps();
         this.currentPing = fetchCurrentPing(client);
         this.onePercentLow = calculateOnePercentLow();
 
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-        updateMinMaxStats();
-
-        MemoryData memory = fetchMemoryData();
-        this.usedMemory = memory.used();
-        this.maxMemory = memory.max();
-
-        this.currentCpuUsage = fetchCpuUsage();
-        this.currentGpuUsage = fetchGpuUsage(client);
-=======
         // 2. Update System/Tick Data (RAM, MSPT/TPS)
         MemoryData mem = fetchMemoryData();
         this.usedMemory = mem.used();
         this.maxMemory = mem.max();
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
 
         TickData tick = fetchTickData(client);
         this.currentMspt = tick.mspt();
@@ -175,51 +140,8 @@ public class PerformanceTracker {
         }
     }
 
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-    private double fetchCpuUsage() {
-        if (operatingSystemBean == null) {
-            return -1;
-        }
-
-        double load = operatingSystemBean.getCpuLoad();
-        return load >= 0 ? Math.min(100.0, load * 100.0) : -1;
-    }
-
-    private double fetchGpuUsage(MinecraftClient client) {
-        double windowsGpuUsage = WindowsGpuUsagePoller.getInstance().getCurrentUtilization();
-        if (windowsGpuUsage >= 0) {
-            hasSeenRealGpuSample = true;
-            consecutiveZeroGpuSamples = 0;
-            return windowsGpuUsage;
-        }
-
-        try {
-            double utilization = client.getGpuUtilizationPercentage();
-            if (Double.isNaN(utilization) || Double.isInfinite(utilization) || utilization < 0) {
-                consecutiveZeroGpuSamples = 0;
-                return -1;
-            }
-
-            double clamped = Math.min(100.0, utilization);
-            if (clamped > 0) {
-                hasSeenRealGpuSample = true;
-                consecutiveZeroGpuSamples = 0;
-                return clamped;
-            }
-
-            consecutiveZeroGpuSamples++;
-            return hasSeenRealGpuSample || consecutiveZeroGpuSamples < 8 ? 0 : -1;
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-
-    private int fetchCurrentPing(MinecraftClient client) {
-        var handler = client.getNetworkHandler();
-=======
     private int fetchCurrentPing(Minecraft client) {
         var handler = client.getConnection();
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
         var player = client.player;
         if (handler == null || player == null) {
             return 0;
@@ -234,47 +156,24 @@ public class PerformanceTracker {
     }
 
     private int calculateOnePercentLow() {
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-        if (frameBufferSize < 10) {
-            return 0;
-        }
-
-        long[] sortedTimes = new long[frameBufferSize];
-        System.arraycopy(frameTimeBuffer, 0, sortedTimes, 0, frameBufferSize);
-        Arrays.sort(sortedTimes);
-=======
         if (frameBufferSize < 10) return 0;
 
         long[] sortedTimes = new long[frameBufferSize];
         System.arraycopy(frameTimeBuffer, 0, sortedTimes, 0, frameBufferSize);
         java.util.Arrays.sort(sortedTimes);
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
 
         int index = Math.max(0, frameBufferSize - 1 - (frameBufferSize / 100));
         long onePercentFrameNanos = sortedTimes[index];
 
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-        if (onePercentFrameNanos == 0) {
-            return 0;
-        }
-        return (int) (1_000_000_000.0 / onePercentFrameNanos);
-    }
-
-=======
         if (onePercentFrameNanos == 0) return 0;
         return (int) (1_000_000_000.0 / onePercentFrameNanos);
     }
 
     // Record every frame-time delta
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
     public void recordFrame() {
         long currentNano = System.nanoTime();
         if (lastFrameTimeNano != 0) {
             long delta = currentNano - lastFrameTimeNano;
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-            currentFrameTimeMs = delta / 1_000_000.0;
-=======
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
 
             sumOfDeltasNanos -= frameTimeBuffer[frameBufferIndex];
             frameTimeBuffer[frameBufferIndex] = delta;
@@ -361,101 +260,7 @@ public class PerformanceTracker {
         return values;
     }
 
-<<<<<<< HEAD:src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
-    public int getCurrentFps() {
-        return currentFps;
-    }
-
-    public double getCurrentFrameTimeMs() {
-        return currentFrameTimeMs;
-    }
-
-    public long getUsedMemory() {
-        return usedMemory;
-    }
-
-    public long getMaxMemory() {
-        return maxMemory;
-    }
-
-    public double getCurrentCpuUsage() {
-        return currentCpuUsage;
-    }
-
-    public double getCurrentGpuUsage() {
-        return currentGpuUsage;
-    }
-
-    public int getCurrentPing() {
-        return currentPing;
-    }
-
-    public double getAverageFps() {
-        return averageFps;
-    }
-
-    public int getOnePercentLow() {
-        return onePercentLow;
-    }
-
-    public double getMspt() {
-        return currentMspt;
-    }
-
-    public double getTps() {
-        return currentTps;
-    }
-
-    public int getLoadedChunks() {
-        return loadedChunks;
-    }
-
-    public int getVisibleChunks() {
-        return visibleChunks;
-    }
-
-    public int getCompletedChunks() {
-        return completedChunks;
-    }
-
-    public String getCoordinatesText() {
-        return coordinatesText;
-    }
-
-    public String getBiomeText() {
-        return biomeText;
-    }
-
-    public int getMinFps() {
-        return minFps == Integer.MAX_VALUE ? currentFps : minFps;
-    }
-
-    public int getMaxFps() {
-        return maxFps;
-    }
-
-    public int getMinPing() {
-        return minPing == Integer.MAX_VALUE ? currentPing : minPing;
-    }
-
-    public int getMaxPing() {
-        return maxPing;
-    }
-
-    private record MemoryData(long used, long max) {
-    }
-
-    private record TickData(double mspt, double tps) {
-    }
-
-    private record ChunkData(int loaded, int visible, int completed) {
-    }
-
-    private record LocationData(String coordinates, String biome) {
-    }
-=======
     // DTOs
     private record MemoryData(long used, long max) {}
     private record TickData(double mspt, double tps) {}
->>>>>>> a101aea65da5162ddeb31b9411f767211024a3e1:common/src/main/java/net/hicham/fps_overlay/PerformanceTracker.java
 }
