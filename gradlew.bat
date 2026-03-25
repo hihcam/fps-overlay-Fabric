@@ -39,6 +39,7 @@ for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
 @rem Find java.exe
+if not defined JAVA_HOME call :findJava21Home
 if defined JAVA_HOME goto findJavaFromJavaHome
 
 set JAVA_EXE=java.exe
@@ -52,6 +53,33 @@ echo Please set the JAVA_HOME variable in your environment to match the 1>&2
 echo location of your Java installation. 1>&2
 
 goto fail
+
+:findJava21Home
+for /f "delims=" %%D in ('dir /b /ad "C:\Program Files\Java\jdk-21*" 2^>nul') do (
+    if exist "C:\Program Files\Java\%%D\bin\java.exe" (
+        set "JAVA_HOME=C:\Program Files\Java\%%D"
+        goto :eof
+    )
+)
+for /f "delims=" %%D in ('dir /b /ad "C:\Program Files\Eclipse Adoptium\jdk-21*" 2^>nul') do (
+    if exist "C:\Program Files\Eclipse Adoptium\%%D\bin\java.exe" (
+        set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\%%D"
+        goto :eof
+    )
+)
+for /f "delims=" %%D in ('dir /b /ad "C:\Program Files\Microsoft\jdk-21*" 2^>nul') do (
+    if exist "C:\Program Files\Microsoft\%%D\bin\java.exe" (
+        set "JAVA_HOME=C:\Program Files\Microsoft\%%D"
+        goto :eof
+    )
+)
+for /f "delims=" %%D in ('dir /b /ad "C:\Program Files\Zulu\zulu-21*" 2^>nul') do (
+    if exist "C:\Program Files\Zulu\%%D\bin\java.exe" (
+        set "JAVA_HOME=C:\Program Files\Zulu\%%D"
+        goto :eof
+    )
+)
+goto :eof
 
 :findJavaFromJavaHome
 set JAVA_HOME=%JAVA_HOME:"=%

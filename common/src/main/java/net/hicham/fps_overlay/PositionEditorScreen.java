@@ -1,26 +1,23 @@
 package net.hicham.fps_overlay;
 
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.tooltip.Tooltip;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.CyclingButtonWidget;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 public class PositionEditorScreen extends Screen {
     private final Screen parent;
     private final ModConfig config;
 
     private boolean dragging;
-    private int dragOffsetX;
-    private int dragOffsetY;
     private double previewScreenX;
     private double previewScreenY;
-    private CyclingButtonWidget<ModConfig.OverlayPosition> anchorButton;
 
     public PositionEditorScreen(Screen parent, ModConfig config) {
-        super(Text.translatable("screen.fps_overlay.position_editor"));
+        super(Component.translatable("screen.fps_overlay.position_editor"));
         this.parent = parent;
         this.config = config;
     }
@@ -29,33 +26,32 @@ public class PositionEditorScreen extends Screen {
     protected void init() {
         int footerY = this.height - 28;
 
-        anchorButton = CyclingButtonWidget.<ModConfig.OverlayPosition>builder(ModConfig.OverlayPosition::getDisplayText,
+        addRenderableWidget(CycleButton.<ModConfig.OverlayPosition>builder(ModConfig.OverlayPosition::getDisplayText,
                         config.appearance.position)
-                .values(ModConfig.OverlayPosition.values())
-                .build(20, 20, 160, 20, Text.translatable("option.fps_overlay.position"),
-                        (button, value) -> config.appearance.position = value);
-        addDrawableChild(anchorButton);
+                .withValues(ModConfig.OverlayPosition.values())
+                .create(20, 20, 160, 20, Component.translatable("option.fps_overlay.position"),
+                        (button, value) -> config.appearance.position = value));
 
-        addDrawableChild(ButtonWidget.builder(Text.translatable("button.fps_overlay.reset_offset"), button -> {
+        addRenderableWidget(Button.builder(Component.translatable("button.fps_overlay.reset_offset"), button -> {
             config.appearance.xOffset = 0;
             config.appearance.yOffset = 0;
-        }).dimensions(190, 20, 110, 20).tooltip(Tooltip.of(Text.translatable("tooltip.fps_overlay.resetOffset")))
+        }).bounds(190, 20, 110, 20).tooltip(Tooltip.create(Component.translatable("tooltip.fps_overlay.resetOffset")))
                 .build());
 
-        addDrawableChild(ButtonWidget.builder(Text.translatable("gui.done"), button -> close())
-                .dimensions(this.width / 2 - 75, footerY, 150, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> onClose())
+                .bounds(this.width / 2 - 75, footerY, 150, 20).build());
     }
 
     @Override
-    public void close() {
+    public void onClose() {
         ConfigManager.saveConfig();
-        if (client != null) {
-            client.setScreen(parent);
+        if (minecraft != null) {
+            minecraft.setScreen(parent);
         }
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         boolean handledByWidget = super.mouseClicked(click, doubled);
         if (handledByWidget) {
             return true;
@@ -65,8 +61,6 @@ public class PositionEditorScreen extends Screen {
             OverlayRenderer.LayoutBounds bounds = OverlayRenderer.getPreviewBounds(this.width, this.height, config);
             if (bounds.contains(click.x(), click.y())) {
                 dragging = true;
-                dragOffsetX = (int) click.x() - bounds.x();
-                dragOffsetY = (int) click.y() - bounds.y();
                 previewScreenX = bounds.x();
                 previewScreenY = bounds.y();
                 return true;
@@ -76,7 +70,7 @@ public class PositionEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(Click click, double deltaX, double deltaY) {
+    public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
         if (dragging && click.button() == 0) {
             previewScreenX += deltaX;
             previewScreenY += deltaY;
@@ -88,11 +82,12 @@ public class PositionEditorScreen extends Screen {
             previewScreenY = Math.max(0, Math.min(previewScreenY, maxY));
 
             float scale = config.appearance.hudScale;
-            OverlayRenderer.LayoutBounds logicalBounds = OverlayRenderer.getPreviewLogicalBounds(this.width, this.height, config);
+            OverlayRenderer.LayoutBounds logicalBounds =
+                    OverlayRenderer.getPreviewLogicalBounds(this.width, this.height, config);
             int logicalWidth = Math.max(1, Math.round(this.width / scale));
             int logicalHeight = Math.max(1, Math.round(this.height / scale));
-            OverlayRenderer.AnchorPoint anchor = OverlayRenderer.getAnchorPoint(logicalWidth, logicalHeight,
-                    logicalBounds.width(), logicalBounds.height(), config.appearance.position);
+            OverlayRenderer.AnchorPoint anchor = OverlayRenderer.getAnchorPoint(
+                    logicalWidth, logicalHeight, logicalBounds.width(), logicalBounds.height(), config.appearance.position);
 
             int targetLogicalX = (int) Math.round(previewScreenX / scale);
             int targetLogicalY = (int) Math.round(previewScreenY / scale);
@@ -100,11 +95,12 @@ public class PositionEditorScreen extends Screen {
             config.appearance.yOffset = targetLogicalY - anchor.y();
             return true;
         }
+
         return super.mouseDragged(click, deltaX, deltaY);
     }
 
     @Override
-    public boolean mouseReleased(Click click) {
+    public boolean mouseReleased(MouseButtonEvent click) {
         if (click.button() == 0) {
             dragging = false;
         }
@@ -112,13 +108,13 @@ public class PositionEditorScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        context.fillGradient(0, 0, this.width, this.height, 0xC0182028, 0xD010141A);
-        OverlayRenderer.renderPreview(context, client, config, this.width, this.height);
-        super.render(context, mouseX, mouseY, delta);
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        guiGraphics.fillGradient(0, 0, this.width, this.height, 0xC0182028, 0xD010141A);
+        OverlayRenderer.renderPreview(guiGraphics, minecraft, config, this.width, this.height);
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
 
-        context.drawCenteredTextWithShadow(textRenderer, title, this.width / 2, 48, 0xFFFFFFFF);
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("text.fps_overlay.position_editor_hint"),
+        guiGraphics.drawCenteredString(font, title, this.width / 2, 48, 0xFFFFFFFF);
+        guiGraphics.drawCenteredString(font, Component.translatable("text.fps_overlay.position_editor_hint"),
                 this.width / 2, 62, 0xFFB7C6D1);
     }
 }

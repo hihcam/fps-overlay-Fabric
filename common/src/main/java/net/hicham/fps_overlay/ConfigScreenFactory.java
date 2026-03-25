@@ -1,227 +1,199 @@
 package net.hicham.fps_overlay;
 
+import me.shedaniel.clothconfig2.api.AbstractConfigListEntry;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-import static net.hicham.fps_overlay.ModConfig.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
-/**
- * Builds the Cloth Config screen. Platform-agnostic (Mojang mappings).
- */
 public class ConfigScreenFactory {
-    private static final String TITLE_CONFIG = "title.fps_overlay.config";
-
-    private static final String CATEGORY_HUD = "category.fps_overlay.hud";
-    private static final String CATEGORY_APPEARANCE = "category.fps_overlay.appearance";
-
-    private static final String TOOLTIP_ENABLED = "tooltip.fps_overlay.enabled";
-    private static final String TOOLTIP_UPDATE_INTERVAL = "tooltip.fps_overlay.updateInterval";
-
-    private static final String TOOLTIP_SHOW_FPS = "tooltip.fps_overlay.showFps";
-    private static final String TOOLTIP_SHOW_AVERAGE_FPS = "tooltip.fps_overlay.showAverageFps";
-
-    private static final String TOOLTIP_SHOW_MEMORY = "tooltip.fps_overlay.showMemory";
-    private static final String TOOLTIP_SHOW_PING = "tooltip.fps_overlay.showPing";
-    private static final String TOOLTIP_POSITION = "tooltip.fps_overlay.position";
-    private static final String TOOLTIP_SHOW_BACKGROUND = "tooltip.fps_overlay.showBackground";
-    private static final String TOOLTIP_BACKGROUND_OPACITY = "tooltip.fps_overlay.backgroundOpacity";
-
-    @SuppressWarnings("null")
     public static Screen createConfigScreen(Screen parent) {
+        return new ConfigHubScreen(parent);
+    }
+
+    public static Screen createSettingsScreen(Screen parent) {
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
-                .setTitle(Component.translatable(TITLE_CONFIG))
+                .setTitle(Component.translatable("title.fps_overlay.config"))
                 .setTransparentBackground(true)
                 .setSavingRunnable(ConfigManager::saveConfig);
 
         ConfigEntryBuilder entryBuilder = builder.entryBuilder();
         ModConfig config = ConfigManager.getConfig();
 
-        // --- HUD Modules Category ---
-        ConfigCategory hud = builder.getOrCreateCategory(Component.translatable(CATEGORY_HUD));
+        ConfigCategory hud = builder.getOrCreateCategory(Component.translatable("category.fps_overlay.hud"));
+        addHudEntries(hud, entryBuilder, config);
 
-        hud.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.enabled"),
-                        config.general.enabled)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable(TOOLTIP_ENABLED))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
-                .setSaveConsumer(value -> config.general.enabled = value)
-                .build());
+        ConfigCategory appearance = builder.getOrCreateCategory(Component.translatable("category.fps_overlay.appearance"));
+        addAppearanceEntries(appearance, entryBuilder, config);
 
-        hud.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.showFps"), config.hud.showFps)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable(TOOLTIP_SHOW_FPS))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
-                .setSaveConsumer(value -> config.hud.showFps = value)
-                .build());
+        ConfigCategory colors = builder.getOrCreateCategory(Component.translatable("category.fps_overlay.colors"));
+        addColorEntries(colors, entryBuilder, config);
 
-        hud.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.showAverageFps"),
-                        config.hud.showAverageFps)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable(TOOLTIP_SHOW_AVERAGE_FPS))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
-                .setSaveConsumer(value -> config.hud.showAverageFps = value)
-                .build());
+        return builder.build();
+    }
 
-        hud.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.show1PercentLow"),
-                        config.hud.show1PercentLow)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("tooltip.fps_overlay.show1PercentLow"))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
-                .setSaveConsumer(value -> config.hud.show1PercentLow = value)
-                .build());
+    private static void addHudEntries(ConfigCategory category, ConfigEntryBuilder entryBuilder, ModConfig config) {
+        ModConfig defaults = new ModConfig();
+        List<AbstractConfigListEntry> entries = new ArrayList<>();
 
-        hud.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.showMemory"),
-                        config.hud.showMemory)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable(TOOLTIP_SHOW_MEMORY))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
-                .setSaveConsumer(value -> config.hud.showMemory = value)
-                .build());
+        entries.add(booleanToggle(entryBuilder, "option.fps_overlay.enabled", config.general.enabled,
+                defaults.general.enabled, value -> config.general.enabled = value));
+        entries.add(booleanToggle(entryBuilder, "option.fps_overlay.enableKeybindings", config.general.enableKeybindings,
+                defaults.general.enableKeybindings, value -> config.general.enableKeybindings = value));
+        entries.add(booleanToggle(entryBuilder, "option.fps_overlay.showGraph", config.hud.showGraph,
+                defaults.hud.showGraph, value -> config.hud.showGraph = value));
+        entries.add(booleanToggle(entryBuilder, "option.fps_overlay.showMinMaxStats", config.hud.showMinMaxStats,
+                defaults.hud.showMinMaxStats, value -> config.hud.showMinMaxStats = value));
+        entries.add(entryBuilder.startTextDescription(Component.translatable("text.fps_overlay.metric_order_config_hint")).build());
 
-        hud.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.showPing"),
-                        config.hud.showPing)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable(TOOLTIP_SHOW_PING))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
-                .setSaveConsumer(value -> config.hud.showPing = value)
-                .build());
+        for (AbstractConfigListEntry<?> entry : entries) {
+            category.addEntry(entry);
+        }
+    }
 
-        hud.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.showMspt"),
-                        config.hud.showMspt)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("tooltip.fps_overlay.showMspt"))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
-                .setSaveConsumer(value -> config.hud.showMspt = value)
-                .build());
+    private static void addAppearanceEntries(ConfigCategory category, ConfigEntryBuilder entryBuilder, ModConfig config) {
+        ModConfig defaults = new ModConfig();
 
-        hud.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.showTps"),
-                        config.hud.showTps)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("tooltip.fps_overlay.showTps"))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
-                .setSaveConsumer(value -> config.hud.showTps = value)
-                .build());
-
-        // --- Appearance Category ---
-        ConfigCategory appearance = builder.getOrCreateCategory(Component.translatable(CATEGORY_APPEARANCE));
-
-        appearance.addEntry(entryBuilder.startEnumSelector(
-                Component.translatable("option.fps_overlay.overlay_style"),
-                OverlayStyle.class,
-                config.appearance.overlayStyle)
-                .setDefaultValue(OverlayStyle.DEFAULT)
+        category.addEntry(entryBuilder
+                .startEnumSelector(Component.translatable("option.fps_overlay.overlay_style"), ModConfig.OverlayStyle.class,
+                        config.appearance.overlayStyle)
+                .setDefaultValue(defaults.appearance.overlayStyle)
+                .setEnumNameProvider(value -> Component.translatable(
+                        "enum.fps_overlay.overlaystyle." + value.name().toLowerCase(Locale.ROOT)))
                 .setSaveConsumer(value -> config.appearance.overlayStyle = value)
                 .build());
 
-        appearance.addEntry(entryBuilder.startEnumSelector(
-                Component.translatable("option.fps_overlay.position"),
-                OverlayPosition.class,
-                config.appearance.position)
-                .setDefaultValue(OverlayPosition.TOP_LEFT)
-                .setTooltip(Component.translatable(TOOLTIP_POSITION))
+        category.addEntry(entryBuilder
+                .startEnumSelector(Component.translatable("option.fps_overlay.position"), ModConfig.OverlayPosition.class,
+                        config.appearance.position)
+                .setDefaultValue(defaults.appearance.position)
+                .setEnumNameProvider(value -> ((ModConfig.OverlayPosition) value).getDisplayText())
                 .setSaveConsumer(value -> config.appearance.position = value)
                 .build());
 
-        appearance.addEntry(entryBuilder
-                .startSelector(Component.translatable("option.fps_overlay.hudScale"),
-                        new Float[] { 0.65f, 0.8f, 0.95f },
-                        config.appearance.hudScale)
-                .setDefaultValue(0.65f)
-                .setNameProvider(val -> {
-                    if (val == 0.65f)
-                        return Component.translatable("enum.fps_overlay.scale.small");
-                    if (val == 0.8f)
-                        return Component.translatable("enum.fps_overlay.scale.normal");
-                    if (val == 0.95f)
-                        return Component.translatable("enum.fps_overlay.scale.big");
-                    return Component.literal(String.format("%.2fx", val));
-                })
+        category.addEntry(entryBuilder
+                .startFloatField(Component.translatable("option.fps_overlay.hudScale"), config.appearance.hudScale)
+                .setDefaultValue(defaults.appearance.hudScale)
+                .setMin(0.2f)
+                .setMax(1.5f)
                 .setSaveConsumer(value -> config.appearance.hudScale = value)
                 .build());
 
-        appearance.addEntry(entryBuilder
-                .startSelector(Component.translatable("option.fps_overlay.updateInterval"),
-                        new Integer[] { 16, 33, 50, 100, 250, 500, 1000 },
-                        config.general.updateIntervalMs)
-                .setDefaultValue(250)
-                .setTooltip(Component.translatable(TOOLTIP_UPDATE_INTERVAL))
-                .setNameProvider(val -> {
-                    return switch (val) {
-                        case 16 -> Component.translatable("enum.fps_overlay.update.16");
-                        case 33 -> Component.translatable("enum.fps_overlay.update.33");
-                        case 50 -> Component.translatable("enum.fps_overlay.update.50");
-                        case 100 -> Component.translatable("enum.fps_overlay.update.100");
-                        case 250 -> Component.translatable("enum.fps_overlay.update.250");
-                        case 500 -> Component.translatable("enum.fps_overlay.update.500");
-                        case 1000 -> Component.translatable("enum.fps_overlay.update.1000");
-                        default -> Component.literal(val + " ms");
-                    };
-                })
+        category.addEntry(entryBuilder
+                .startIntSlider(Component.translatable("option.fps_overlay.updateInterval"), config.general.updateIntervalMs, 16,
+                        1000)
+                .setDefaultValue(defaults.general.updateIntervalMs)
                 .setSaveConsumer(value -> config.general.updateIntervalMs = value)
                 .build());
 
-        appearance.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.showBackground"),
-                        config.appearance.showBackground)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable(TOOLTIP_SHOW_BACKGROUND))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
+        category.addEntry(entryBuilder
+                .startIntField(Component.translatable("option.fps_overlay.xOffset"), config.appearance.xOffset)
+                .setDefaultValue(defaults.appearance.xOffset)
+                .setMin(-2000)
+                .setMax(2000)
+                .setSaveConsumer(value -> config.appearance.xOffset = value)
+                .build());
+
+        category.addEntry(entryBuilder
+                .startIntField(Component.translatable("option.fps_overlay.yOffset"), config.appearance.yOffset)
+                .setDefaultValue(defaults.appearance.yOffset)
+                .setMin(-2000)
+                .setMax(2000)
+                .setSaveConsumer(value -> config.appearance.yOffset = value)
+                .build());
+
+        category.addEntry(entryBuilder
+                .startBooleanToggle(Component.translatable("option.fps_overlay.showBackground"), config.appearance.showBackground)
+                .setDefaultValue(defaults.appearance.showBackground)
                 .setSaveConsumer(value -> config.appearance.showBackground = value)
                 .build());
 
-        appearance.addEntry(entryBuilder
-                .startSelector(Component.translatable("option.fps_overlay.backgroundOpacity"),
-                        new Integer[] { 0, 25, 50, 100, 150, 180, 200, 225, 255 },
-                        config.appearance.backgroundOpacity)
-                .setDefaultValue(180)
-                .setTooltip(Component.translatable(TOOLTIP_BACKGROUND_OPACITY))
-                .setNameProvider(val -> {
-                    return switch (val) {
-                        case 0 -> Component.translatable("enum.fps_overlay.opacity.0");
-                        case 25 -> Component.translatable("enum.fps_overlay.opacity.25");
-                        case 50 -> Component.translatable("enum.fps_overlay.opacity.50");
-                        case 100 -> Component.translatable("enum.fps_overlay.opacity.100");
-                        case 150 -> Component.translatable("enum.fps_overlay.opacity.150");
-                        case 180 -> Component.translatable("enum.fps_overlay.opacity.180");
-                        case 200 -> Component.translatable("enum.fps_overlay.opacity.200");
-                        case 225 -> Component.translatable("enum.fps_overlay.opacity.225");
-                        case 255 -> Component.translatable("enum.fps_overlay.opacity.255");
-                        default -> Component.literal(val.toString());
-                    };
-                })
+        category.addEntry(entryBuilder
+                .startIntSlider(Component.translatable("option.fps_overlay.backgroundOpacity"),
+                        config.appearance.backgroundOpacity, 0, 255)
+                .setDefaultValue(defaults.appearance.backgroundOpacity)
                 .setSaveConsumer(value -> config.appearance.backgroundOpacity = value)
                 .build());
 
-        appearance.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.autoHideF3"),
-                        config.appearance.autoHideF3)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("tooltip.fps_overlay.autoHideF3"))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
+        category.addEntry(entryBuilder
+                .startBooleanToggle(Component.translatable("option.fps_overlay.autoHideF3"), config.appearance.autoHideF3)
+                .setDefaultValue(defaults.appearance.autoHideF3)
                 .setSaveConsumer(value -> config.appearance.autoHideF3 = value)
                 .build());
 
-        appearance.addEntry(entryBuilder
-                .startBooleanToggle(Component.translatable("option.fps_overlay.adaptiveColors"),
-                        config.appearance.adaptiveColors)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("tooltip.fps_overlay.adaptiveColors"))
-                .setYesNoTextSupplier(val -> val ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
+        category.addEntry(entryBuilder
+                .startBooleanToggle(Component.translatable("option.fps_overlay.adaptiveColors"), config.appearance.adaptiveColors)
+                .setDefaultValue(defaults.appearance.adaptiveColors)
                 .setSaveConsumer(value -> config.appearance.adaptiveColors = value)
                 .build());
 
-        return builder.build();
+        category.addEntry(entryBuilder
+                .startEnumSelector(Component.translatable("option.fps_overlay.textEffect"), ModConfig.TextEffect.class,
+                        config.appearance.textEffect)
+                .setDefaultValue(defaults.appearance.textEffect)
+                .setEnumNameProvider(value -> Component.translatable(
+                        "enum.fps_overlay.textEffect." + value.name().toLowerCase(Locale.ROOT)))
+                .setSaveConsumer(value -> config.appearance.textEffect = value)
+                .build());
+
+        category.addEntry(entryBuilder
+                .startEnumSelector(Component.translatable("option.fps_overlay.themePreset"), ModConfig.ThemePreset.class,
+                        config.appearance.themePreset)
+                .setDefaultValue(defaults.appearance.themePreset)
+                .setEnumNameProvider(value -> Component.translatable(
+                        "enum.fps_overlay.themePreset." + value.name().toLowerCase(Locale.ROOT)))
+                .setSaveConsumer(config.appearance::applyThemePreset)
+                .build());
+
+        category.addEntry(entryBuilder.startTextDescription(Component.translatable("text.fps_overlay.position_config_hint")).build());
+    }
+
+    private static void addColorEntries(ConfigCategory category, ConfigEntryBuilder entryBuilder, ModConfig config) {
+        ModConfig defaults = new ModConfig();
+
+        category.addEntry(colorEntry(entryBuilder, "option.fps_overlay.backgroundColor", config.appearance.backgroundColor,
+                defaults.appearance.backgroundColor, value -> config.appearance.backgroundColor = value, config));
+        category.addEntry(colorEntry(entryBuilder, "option.fps_overlay.labelColor", config.appearance.labelColor,
+                defaults.appearance.labelColor, value -> config.appearance.labelColor = value, config));
+        category.addEntry(colorEntry(entryBuilder, "option.fps_overlay.valueColor", config.appearance.valueColor,
+                defaults.appearance.valueColor, value -> config.appearance.valueColor = value, config));
+        category.addEntry(colorEntry(entryBuilder, "option.fps_overlay.unitColor", config.appearance.unitColor,
+                defaults.appearance.unitColor, value -> config.appearance.unitColor = value, config));
+        category.addEntry(colorEntry(entryBuilder, "option.fps_overlay.dividerColor", config.appearance.dividerColor,
+                defaults.appearance.dividerColor, value -> config.appearance.dividerColor = value, config));
+        category.addEntry(colorEntry(entryBuilder, "option.fps_overlay.goodColor", config.appearance.goodColor,
+                defaults.appearance.goodColor, value -> config.appearance.goodColor = value, config));
+        category.addEntry(colorEntry(entryBuilder, "option.fps_overlay.warningColor", config.appearance.warningColor,
+                defaults.appearance.warningColor, value -> config.appearance.warningColor = value, config));
+        category.addEntry(colorEntry(entryBuilder, "option.fps_overlay.badColor", config.appearance.badColor,
+                defaults.appearance.badColor, value -> config.appearance.badColor = value, config));
+    }
+
+    private static AbstractConfigListEntry<?> booleanToggle(ConfigEntryBuilder entryBuilder, String key, boolean value,
+            boolean defaultValue, Consumer<Boolean> saveConsumer) {
+        return entryBuilder.startBooleanToggle(Component.translatable(key), value)
+                .setDefaultValue(defaultValue)
+                .setYesNoTextSupplier(enabled -> enabled ? Component.literal("[ ON ]") : Component.literal("[ OFF ]"))
+                .setSaveConsumer(saveConsumer)
+                .build();
+    }
+
+    private static AbstractConfigListEntry<?> colorEntry(ConfigEntryBuilder entryBuilder, String key, int value,
+            int defaultValue, IntConsumer saveConsumer, ModConfig config) {
+        return entryBuilder.startColorField(Component.translatable(key), value & 0xFFFFFF)
+                .setDefaultValue(defaultValue & 0xFFFFFF)
+                .setSaveConsumer(color -> {
+                    saveConsumer.accept(0xFF000000 | (color & 0xFFFFFF));
+                    config.appearance.themePreset = ModConfig.ThemePreset.CUSTOM;
+                })
+                .build();
     }
 }

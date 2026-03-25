@@ -8,22 +8,20 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Shared mod logic. Platform entrypoints call into this class.
- */
 public class FpsOverlayMod {
     public static final String MOD_ID = "fps_overlay";
     public static final Logger LOGGER = LogManager.getLogger("FpsOverlay");
 
-    private static ModConfig config;
-    private static final AtomicBoolean modInitialized = new AtomicBoolean(false);
+    private static final AtomicBoolean MOD_INITIALIZED = new AtomicBoolean(false);
     private static final Object INIT_LOCK = new Object();
+
+    private static ModConfig config;
 
     public static void init() {
         LOGGER.info("Initializing Fps Overlay...");
 
         synchronized (INIT_LOCK) {
-            if (modInitialized.get()) {
+            if (MOD_INITIALIZED.get()) {
                 LOGGER.warn("Mod already initialized");
                 return;
             }
@@ -34,71 +32,120 @@ public class FpsOverlayMod {
 
                 PerformanceTracker.getInstance().setConfig(config);
                 OverlayRenderer.setConfig(config);
-
                 ConfigManager.registerConfigListener(FpsOverlayMod::onConfigChanged);
 
-                modInitialized.set(true);
+                MOD_INITIALIZED.set(true);
                 LOGGER.info("Fps Overlay initialized successfully");
-
             } catch (Exception e) {
                 LOGGER.error("Failed to initialize Fps Overlay", e);
-                modInitialized.set(false);
+                MOD_INITIALIZED.set(false);
             }
         }
     }
 
-    public static boolean isInitialized() {
-        return modInitialized.get();
+    public static boolean shouldRenderOverlay() {
+        Minecraft client = Minecraft.getInstance();
+        return MOD_INITIALIZED.get()
+                && config != null
+                && config.general.enabled
+                && client != null
+                && client.player != null
+                && client.level != null
+                && client.font != null
+                && !client.options.hideGui;
+    }
+
+    public static void onClientTick(Minecraft client) {
+        if (!MOD_INITIALIZED.get() || client.player == null) {
+            return;
+        }
+
+        PerformanceTracker.getInstance().update(client);
     }
 
     public static ModConfig getConfig() {
         return config;
     }
 
-    public static boolean shouldRenderOverlay() {
-        Minecraft client = Minecraft.getInstance();
-        return modInitialized.get() &&
-                config != null &&
-                config.general.enabled &&
-                client != null &&
-                client.player != null &&
-                client.level != null &&
-                client.font != null &&
-                !client.options.hideGui;
+    public static void toggleOverlay() {
+        if (config == null) {
+            return;
+        }
+
+        config.general.enabled = !config.general.enabled;
+        ConfigManager.saveConfig();
+        sendInfoMessage("Overlay " + enabledText(config.general.enabled));
     }
 
-    public static void onClientTick(Minecraft client) {
-        if (!modInitialized.get() || client.player == null)
+    public static void toggleMetric(OverlayMetric metric) {
+        if (config == null) {
             return;
+        }
 
-        PerformanceTracker.getInstance().update(client);
+        boolean enabled = !config.hud.isMetricEnabled(metric);
+        config.hud.setMetricEnabled(metric, enabled);
+        ConfigManager.saveConfig();
+        sendInfoMessage(Component.translatable(metric.getLabelKey()).getString() + " " + enabledText(enabled));
+    }
+
+    public static void toggleGraph() {
+        if (config == null) {
+            return;
+        }
+
+        config.hud.showGraph = !config.hud.showGraph;
+        ConfigManager.saveConfig();
+        sendInfoMessage("Graph " + enabledText(config.hud.showGraph));
+    }
+
+    public static void openConfig(Minecraft client) {
+        if (client == null) {
+            return;
+        }
+
+        try {
+            Screen configScreen = ConfigScreenFactory.createConfigScreen(client.screen);
+            client.setScreen(configScreen);
+        } catch (Exception e) {
+            LOGGER.error("Failed to open config screen", e);
+        }
+    }
+
+    public static void openPositionEditor(Minecraft client) {
+        if (client == null) {
+            return;
+        }
+
+        client.setScreen(new PositionEditorScreen(client.screen, ConfigManager.getConfig()));
+    }
+
+    public static void resetStatistics() {
+        PerformanceTracker.getInstance().resetSessionStats();
+        sendInfoMessage("Session statistics reset");
     }
 
     private static void onConfigChanged() {
-        if (!modInitialized.get())
+        if (!MOD_INITIALIZED.get()) {
             return;
+        }
 
-        LOGGER.debug("Configuration changed - reloading settings");
-        try {
-            config = ConfigManager.getConfig();
+        config = ConfigManager.getConfig();
+        PerformanceTracker.getInstance().setConfig(config);
+        OverlayRenderer.setConfig(config);
 
-            PerformanceTracker.getInstance().setConfig(config);
-            OverlayRenderer.setConfig(config);
-
-            if (!config.hud.showAverageFps) {
-                PerformanceTracker.getInstance().clearAverageFpsData();
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to handle config change", e);
+        if (!config.hud.showAverageFps) {
+            PerformanceTracker.getInstance().clearAverageFpsData();
         }
     }
 
-    public static void sendToggleMessage(String feature, boolean enabled) {
+    private static void sendInfoMessage(String message) {
         Minecraft client = Minecraft.getInstance();
         if (client != null && client.player != null) {
-            String status = enabled ? "§aENABLED" : "§cDISABLED";
-            String message = String.format("§7[§6FpsOverlay§7] §f%s §7is now %s", feature, status);
-            client.player.displayClientMessage(Component.literal(message), false);
+            client.player.displayClientMessage(Component.literal("[FpsOverlay] " + message), true);
         }
+    }
+
+    private static String enabledText(boolean enabled) {
+        return enabled ? "enabled" : "disabled";
     }
 }

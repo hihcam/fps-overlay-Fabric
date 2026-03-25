@@ -1,15 +1,15 @@
 package net.hicham.fps_overlay;
 
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 public class ConfigHubScreen extends Screen {
     private final Screen parent;
 
     public ConfigHubScreen(Screen parent) {
-        super(Text.translatable("screen.fps_overlay.config_hub"));
+        super(Component.translatable("screen.fps_overlay.config_hub"));
         this.parent = parent;
     }
 
@@ -21,41 +21,41 @@ public class ConfigHubScreen extends Screen {
         int buttonHeight = 20;
         int gap = 24;
 
-        addDrawableChild(ButtonWidget.builder(Text.translatable("button.fps_overlay.open_settings"), button -> {
-            if (client != null) {
-                client.setScreen(ConfigScreenFactory.createSettingsScreen(this));
+        addRenderableWidget(Button.builder(Component.translatable("button.fps_overlay.open_settings"), button -> {
+            if (minecraft != null) {
+                minecraft.setScreen(ConfigScreenFactory.createSettingsScreen(this));
             }
-        }).dimensions(centerX - buttonWidth / 2, startY, buttonWidth, buttonHeight).build());
+        }).bounds(centerX - buttonWidth / 2, startY, buttonWidth, buttonHeight).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.translatable("button.fps_overlay.edit_position"), button -> {
-            if (client != null) {
-                client.setScreen(new PositionEditorScreen(this, ConfigManager.getConfig()));
+        addRenderableWidget(Button.builder(Component.translatable("button.fps_overlay.edit_position"), button -> {
+            if (minecraft != null) {
+                minecraft.setScreen(new PositionEditorScreen(this, ConfigManager.getConfig()));
             }
-        }).dimensions(centerX - buttonWidth / 2, startY + gap, buttonWidth, buttonHeight).build());
+        }).bounds(centerX - buttonWidth / 2, startY + gap, buttonWidth, buttonHeight).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.translatable("button.fps_overlay.arrange_metrics"), button -> {
-            if (client != null) {
-                client.setScreen(new MetricOrderScreen(this, ConfigManager.getConfig()));
+        addRenderableWidget(Button.builder(Component.translatable("button.fps_overlay.arrange_metrics"), button -> {
+            if (minecraft != null) {
+                minecraft.setScreen(new MetricOrderScreen(this, ConfigManager.getConfig()));
             }
-        }).dimensions(centerX - buttonWidth / 2, startY + (gap * 2), buttonWidth, buttonHeight).build());
+        }).bounds(centerX - buttonWidth / 2, startY + (gap * 2), buttonWidth, buttonHeight).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.translatable("gui.done"), button -> close())
-                .dimensions(centerX - buttonWidth / 2, startY + (gap * 4), buttonWidth, buttonHeight).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> onClose())
+                .bounds(centerX - buttonWidth / 2, startY + (gap * 4), buttonWidth, buttonHeight).build());
     }
 
     @Override
-    public void close() {
-        if (client != null) {
-            client.setScreen(parent);
+    public void onClose() {
+        if (minecraft != null) {
+            minecraft.setScreen(parent);
         }
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        context.fillGradient(0, 0, this.width, this.height, 0xC0182028, 0xD010141A);
-        super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(textRenderer, title, this.width / 2, this.height / 2 - 84, 0xFFFFFFFF);
-        context.drawCenteredTextWithShadow(textRenderer, Text.translatable("text.fps_overlay.config_hub_hint"),
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        guiGraphics.fillGradient(0, 0, this.width, this.height, 0xC0182028, 0xD010141A);
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        guiGraphics.drawCenteredString(font, title, this.width / 2, this.height / 2 - 84, 0xFFFFFFFF);
+        guiGraphics.drawCenteredString(font, Component.translatable("text.fps_overlay.config_hub_hint"),
                 this.width / 2, this.height / 2 - 68, 0xFFB7C6D1);
     }
 }
