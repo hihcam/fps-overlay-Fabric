@@ -1,49 +1,60 @@
 package net.hicham.fps_overlay;
 
+import net.fabricmc.fabric.api.event.Event;
+import net.fabricmc.fabric.api.event.EventFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConfigManager {
     private static final Logger LOGGER = LogManager.getLogger("fps_overlay/ConfigManager");
-    private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
-
+    private static final AtomicBoolean initialized = new AtomicBoolean(false);
     private static File configFile;
     private static ModConfig config;
+
+    @SuppressWarnings("null")
+    public static final Event<ConfigChangedCallback> CONFIG_CHANGED = java.util.Objects.requireNonNull(EventFactory.createArrayBacked(
+            ConfigChangedCallback.class,
+            (listeners) -> () -> {
+                for (ConfigChangedCallback listener : listeners) {
+                    try {
+                        listener.onConfigChanged();
+                    } catch (Exception e) {
+                        LOGGER.error("Error in config change listener", e);
+                    }
+                }
+            }
+    ));
 
     @FunctionalInterface
     public interface ConfigChangedCallback {
         void onConfigChanged();
     }
 
-    private static final List<ConfigChangedCallback> LISTENERS = new ArrayList<>();
-
     public static void initialize() {
-        if (INITIALIZED.get()) {
+        if (initialized.get()) {
             return;
         }
 
         try {
             Path configDir = Paths.get("config", "fps_overlay");
-            File resolvedConfigFile = configDir.resolve("config.json").toFile();
-
+            File configFile = configDir.resolve("config.json").toFile();
+            
             if (!configDir.toFile().exists()) {
                 configDir.toFile().mkdirs();
             }
 
-            configFile = resolvedConfigFile;
+            ConfigManager.configFile = configFile;
             config = ModConfig.load(configFile);
-            INITIALIZED.set(true);
+            initialized.set(true);
             LOGGER.info("Configuration manager initialized successfully");
         } catch (Exception e) {
             LOGGER.error("Failed to initialize configuration", e);
-            INITIALIZED.set(true);
+            initialized.set(true);
         }
     }
 
@@ -58,7 +69,7 @@ public class ConfigManager {
     public static void saveConfig() {
         ensureInitialized();
         ModConfig.save(configFile, getConfig());
-        notifyListeners();
+        CONFIG_CHANGED.invoker().onConfigChanged();
     }
 
     public static void resetToDefaults() {
@@ -69,33 +80,23 @@ public class ConfigManager {
     }
 
     public static void registerConfigListener(ConfigChangedCallback listener) {
-        LISTENERS.add(listener);
-    }
-
-    public static boolean isInitialized() {
-        return INITIALIZED.get();
-    }
-
-    public static void cleanup() {
-        INITIALIZED.set(false);
-        config = null;
-        configFile = null;
-    }
-
-    private static void notifyListeners() {
-        for (ConfigChangedCallback listener : LISTENERS) {
-            try {
-                listener.onConfigChanged();
-            } catch (Exception e) {
-                LOGGER.error("Error in config change listener", e);
-            }
-        }
+        CONFIG_CHANGED.register(listener);
     }
 
     private static void ensureInitialized() {
-        if (!INITIALIZED.get()) {
+        if (!initialized.get()) {
             LOGGER.warn("ConfigManager accessed before initialization, initializing now...");
             initialize();
         }
+    }
+
+    public static boolean isInitialized() {
+        return initialized.get();
+    }
+
+    public static void cleanup() {
+        initialized.set(false);
+        config = null;
+        configFile = null;
     }
 }

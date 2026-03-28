@@ -1,9 +1,8 @@
 plugins {
     id 'architectury-plugin'
     id 'dev.architectury.loom'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'com.gradleup.shadow' version "${shadow_version}"
     id 'com.modrinth.minotaur'
-    id 'com.matthewprenger.cursegradle'
 }
 
 architectury {
@@ -85,6 +84,11 @@ components.java {
 }
 
 def changelogContent = rootProject.file("CHANGELOG.md").exists() ? rootProject.file("CHANGELOG.md").text : "No changelog provided."
+def hasCurseforgeToken = (System.getenv("CURSEFORGE_TOKEN") ?: project.findProperty("curseforge_token")) as boolean
+
+if (hasCurseforgeToken) {
+    apply plugin: 'com.matthewprenger.cursegradle'
+}
 
 modrinth {
     token = System.getenv("MODRINTH_TOKEN") ?: project.findProperty("modrinth_token") ?: ""
@@ -102,7 +106,7 @@ modrinth {
 }
 
 def curseforgeId = project.findProperty('curseforge_project_id') ?: ''
-if (curseforgeId) {
+if (hasCurseforgeToken && curseforgeId) {
     curseforge {
         apiKey = System.getenv("CURSEFORGE_TOKEN") ?: project.findProperty("curseforge_token") ?: ""
         project {

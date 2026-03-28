@@ -132,6 +132,20 @@ Please set the JAVA_HOME variable in your environment to match the
 location of your Java installation."
     fi
 else
+    if [ -x "/usr/libexec/java_home" ] ; then
+        JAVA_HOME=$( /usr/libexec/java_home -v 21 2>/dev/null ) || JAVA_HOME=
+    fi
+    if [ -z "$JAVA_HOME" ] ; then
+        for candidate in /usr/lib/jvm/java-21* /usr/lib/jvm/jdk-21* /Library/Java/JavaVirtualMachines/jdk-21*/Contents/Home ; do
+            if [ -x "$candidate/bin/java" ] ; then
+                JAVA_HOME=$candidate
+                break
+            fi
+        done
+    fi
+    if [ -n "$JAVA_HOME" ] ; then
+        JAVACMD=$JAVA_HOME/bin/java
+    else
     JAVACMD=java
     if ! command -v java >/dev/null 2>&1
     then
@@ -139,6 +153,7 @@ else
 
 Please set the JAVA_HOME variable in your environment to match the
 location of your Java installation."
+    fi
     fi
 fi
 
