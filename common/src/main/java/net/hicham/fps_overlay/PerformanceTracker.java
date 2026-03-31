@@ -1,6 +1,5 @@
 package net.hicham.fps_overlay;
 
-import com.sun.management.OperatingSystemMXBean;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -14,19 +13,19 @@ public class PerformanceTracker {
     private static final int GRAPH_SAMPLE_CAPACITY = 600;
     private static final long GRAPH_SAMPLE_INTERVAL_MS = 100L;
 
-    private final OperatingSystemMXBean operatingSystemBean =
-            ManagementFactory.getOperatingSystemMXBean() instanceof OperatingSystemMXBean bean ? bean : null;
+
 
     private ModConfig config;
 
     private int currentFps = 0;
-    private double currentFrameTimeMs = 0;
+    private volatile double currentFrameTimeMs = 0;
+    private final java.util.concurrent.ConcurrentLinkedDeque<Long> frameTimeBuffer = new java.util.concurrent.ConcurrentLinkedDeque<>();
+    private final java.util.concurrent.atomic.AtomicLong sumOfDeltasNanos = new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicInteger frameBufferSize = new java.util.concurrent.atomic.AtomicInteger(0);
+    private static final int MAX_FRAME_SAMPLES = 1000;
+
     private long usedMemory = 0;
     private long maxMemory = 0;
-    private double currentCpuUsage = -1;
-    private double currentGpuUsage = -1;
-    private boolean hasSeenRealGpuSample = false;
-    private int consecutiveZeroGpuSamples = 0;
     private int currentPing = 0;
     private int onePercentLow = 0;
     private double currentMspt = 0;
@@ -41,21 +40,17 @@ public class PerformanceTracker {
     private int maxFps = 0;
     private int minPing = Integer.MAX_VALUE;
     private int maxPing = 0;
-
     private double averageFps = 0;
-    private final long[] frameTimeBuffer = new long[1000];
-    private long sumOfDeltasNanos = 0;
-    private int frameBufferIndex = 0;
-    private int frameBufferSize = 0;
 
     private final int[] fpsGraphBuffer = new int[GRAPH_SAMPLE_CAPACITY];
     private final int[] graphCopyBuffer = new int[GRAPH_SAMPLE_CAPACITY];
+    private final Object graphLock = new Object();
     private int graphIndex = 0;
     private int graphSize = 0;
 
-    private long lastUpdateTime = 0;
-    private long lastFrameTimeNano = 0;
-    private long lastGraphSampleTime = 0;
+    private volatile long lastUpdateTime = 0;
+    private volatile long lastFrameTimeNano = 0;
+    private volatile long lastGraphSampleTime = 0;
 
     private PerformanceTracker() {
     }
@@ -94,9 +89,6 @@ public class PerformanceTracker {
         usedMemory = memory.used();
         maxMemory = memory.max();
 
-        currentCpuUsage = fetchCpuUsage();
-        currentGpuUsage = fetchGpuUsage(client);
-
         TickData tick = fetchTickData(client);
         currentMspt = tick.mspt();
         currentTps = tick.tps();
@@ -115,13 +107,15 @@ public class PerformanceTracker {
             long delta = currentNano - lastFrameTimeNano;
             currentFrameTimeMs = delta / 1_000_000.0;
 
-            sumOfDeltasNanos -= frameTimeBuffer[frameBufferIndex];
-            frameTimeBuffer[frameBufferIndex] = delta;
-            sumOfDeltasNanos += delta;
+            sumOfDeltasNanos.addAndGet(delta);
+            frameTimeBuffer.addLast(delta);
 
-            frameBufferIndex = (frameBufferIndex + 1) % frameTimeBuffer.length;
-            if (frameBufferSize < frameTimeBuffer.length) {
-                frameBufferSize++;
+            if (frameBufferSize.incrementAndGet() > MAX_FRAME_SAMPLES) {
+                Long removed = frameTimeBuffer.pollFirst();
+                if (removed != null) {
+                    sumOfDeltasNanos.addAndGet(-removed);
+                    frameBufferSize.decrementAndGet();
+                }
             }
         }
         lastFrameTimeNano = currentNano;
@@ -132,36 +126,38 @@ public class PerformanceTracker {
     }
 
     public void resetSessionStats() {
-        frameBufferIndex = 0;
-        frameBufferSize = 0;
+        frameBufferSize.set(0);
         averageFps = 0;
-        sumOfDeltasNanos = 0;
-        Arrays.fill(frameTimeBuffer, 0);
+        sumOfDeltasNanos.set(0);
+        frameTimeBuffer.clear();
 
-        graphIndex = 0;
-        graphSize = 0;
-        Arrays.fill(fpsGraphBuffer, 0);
+        synchronized (graphLock) {
+            graphIndex = 0;
+            graphSize = 0;
+            Arrays.fill(fpsGraphBuffer, 0);
+        }
 
         minFps = Integer.MAX_VALUE;
         maxFps = 0;
         minPing = Integer.MAX_VALUE;
         maxPing = 0;
-        consecutiveZeroGpuSamples = 0;
     }
 
     public int[] copyGraphValues() {
-        int size = graphSize;
-        for (int i = 0; i < size; i++) {
-            int sourceIndex = (graphIndex - size + i + fpsGraphBuffer.length) % fpsGraphBuffer.length;
-            graphCopyBuffer[i] = fpsGraphBuffer[sourceIndex];
+        synchronized (graphLock) {
+            int size = graphSize;
+            for (int i = 0; i < size; i++) {
+                int sourceIndex = (graphIndex - size + i + fpsGraphBuffer.length) % fpsGraphBuffer.length;
+                graphCopyBuffer[i] = fpsGraphBuffer[sourceIndex];
+            }
+            // Return a correctly-sized view
+            if (size == graphCopyBuffer.length) {
+                return graphCopyBuffer;
+            }
+            int[] values = new int[size];
+            System.arraycopy(graphCopyBuffer, 0, values, 0, size);
+            return values;
         }
-        // Return a correctly-sized view
-        if (size == graphCopyBuffer.length) {
-            return graphCopyBuffer;
-        }
-        int[] values = new int[size];
-        System.arraycopy(graphCopyBuffer, 0, values, 0, size);
-        return values;
     }
 
     public int getCurrentFps() {
@@ -178,14 +174,6 @@ public class PerformanceTracker {
 
     public long getMaxMemory() {
         return maxMemory;
-    }
-
-    public double getCurrentCpuUsage() {
-        return currentCpuUsage;
-    }
-
-    public double getCurrentGpuUsage() {
-        return currentGpuUsage;
     }
 
     public int getCurrentPing() {
@@ -260,18 +248,22 @@ public class PerformanceTracker {
         }
         lastGraphSampleTime = currentTime;
 
-        fpsGraphBuffer[graphIndex] = currentFps;
-        graphIndex = (graphIndex + 1) % fpsGraphBuffer.length;
-        if (graphSize < fpsGraphBuffer.length) {
-            graphSize++;
+        synchronized (graphLock) {
+            fpsGraphBuffer[graphIndex] = currentFps;
+            graphIndex = (graphIndex + 1) % fpsGraphBuffer.length;
+            if (graphSize < fpsGraphBuffer.length) {
+                graphSize++;
+            }
         }
     }
 
     private double calculateAverageFps() {
-        if (frameBufferSize == 0 || sumOfDeltasNanos == 0) {
+        int size = frameBufferSize.get();
+        long sum = sumOfDeltasNanos.get();
+        if (size == 0 || sum <= 0) {
             return 0;
         }
-        return (frameBufferSize * 1_000_000_000.0) / sumOfDeltasNanos;
+        return (size * 1_000_000_000.0) / sum;
     }
 
     private MemoryData fetchMemoryData() {
@@ -280,44 +272,6 @@ public class PerformanceTracker {
             return new MemoryData(runtime.totalMemory() - runtime.freeMemory(), runtime.maxMemory());
         } catch (Exception e) {
             return new MemoryData(0, 0);
-        }
-    }
-
-    private double fetchCpuUsage() {
-        if (operatingSystemBean == null) {
-            return -1;
-        }
-
-        double load = operatingSystemBean.getCpuLoad();
-        return load >= 0 ? Math.min(100.0, load * 100.0) : -1;
-    }
-
-    private double fetchGpuUsage(Minecraft client) {
-        double platformGpuUsage = PlatformGpuUsageProvider.getInstance().getCurrentUtilization();
-        if (platformGpuUsage >= 0) {
-            hasSeenRealGpuSample = true;
-            consecutiveZeroGpuSamples = 0;
-            return platformGpuUsage;
-        }
-
-        try {
-            double utilization = invokeDouble(client, "getGpuUtilization", "getGpuUtilizationPercentage");
-            if (Double.isNaN(utilization) || Double.isInfinite(utilization) || utilization < 0) {
-                consecutiveZeroGpuSamples = 0;
-                return -1;
-            }
-
-            double clamped = Math.min(100.0, utilization);
-            if (clamped > 0) {
-                hasSeenRealGpuSample = true;
-                consecutiveZeroGpuSamples = 0;
-                return clamped;
-            }
-
-            consecutiveZeroGpuSamples++;
-            return hasSeenRealGpuSample || consecutiveZeroGpuSamples < 8 ? 0 : -1;
-        } catch (Exception e) {
-            return -1;
         }
     }
 
@@ -337,24 +291,16 @@ public class PerformanceTracker {
     }
 
     private int calculateOnePercentLow() {
-        if (frameBufferSize < 10) {
+        int size = frameBufferSize.get();
+        if (size < 10) {
             return 0;
         }
 
-        long[] sortedTimes = new long[frameBufferSize];
-        if (frameBufferSize < frameTimeBuffer.length) {
-            // Buffer hasn't wrapped yet — valid data starts at index 0
-            System.arraycopy(frameTimeBuffer, 0, sortedTimes, 0, frameBufferSize);
-        } else {
-            // Buffer has wrapped — frameBufferIndex points to the oldest entry
-            int tailLen = frameTimeBuffer.length - frameBufferIndex;
-            System.arraycopy(frameTimeBuffer, frameBufferIndex, sortedTimes, 0, tailLen);
-            System.arraycopy(frameTimeBuffer, 0, sortedTimes, tailLen, frameBufferIndex);
-        }
-        Arrays.sort(sortedTimes);
+        Long[] samples = frameTimeBuffer.toArray(new Long[0]);
+        Arrays.sort(samples);
 
-        int index = Math.max(0, frameBufferSize - 1 - (frameBufferSize / 100));
-        long onePercentFrameNanos = sortedTimes[index];
+        int index = Math.max(0, samples.length - 1 - (samples.length / 100));
+        long onePercentFrameNanos = samples[index];
 
         if (onePercentFrameNanos <= 0) {
             return 0;
@@ -369,7 +315,7 @@ public class PerformanceTracker {
             double tps = Math.min(20.0, 1000.0 / Math.max(1.0, mspt));
             return new TickData(mspt, tps);
         }
-        return new TickData(0, 20.0);
+        return new TickData(-1, -1);
     }
 
     private ChunkData fetchChunkData(Minecraft client) {
@@ -420,24 +366,6 @@ public class PerformanceTracker {
         return new LocationData(coordinates, biome);
     }
 
-    private double invokeDouble(Object target, String... methodNames) throws ReflectiveOperationException {
-        Object value = invokeObject(target, methodNames);
-        if (value instanceof Number number) {
-            return number.doubleValue();
-        }
-        throw new NoSuchMethodException(String.join(", ", methodNames));
-    }
-
-    private Object invokeObject(Object target, String... methodNames) throws ReflectiveOperationException {
-        for (String methodName : methodNames) {
-            try {
-                Method method = target.getClass().getMethod(methodName);
-                return method.invoke(target);
-            } catch (NoSuchMethodException ignored) {
-            }
-        }
-        throw new NoSuchMethodException(String.join(", ", methodNames));
-    }
 
     private record MemoryData(long used, long max) {
     }

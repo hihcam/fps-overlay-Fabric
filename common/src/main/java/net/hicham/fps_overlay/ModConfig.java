@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ModConfig {
     private static final Logger LOGGER = LogManager.getLogger("fps_overlay/ModConfig");
@@ -66,18 +67,16 @@ public class ModConfig {
         public boolean enabled = true;
         public boolean enableKeybindings = true;
         public int updateIntervalMs = 250;
-        public int configVersion = 5;
+        public int configVersion = 6;
     }
 
     public static class HUD {
         public boolean showFps = true;
         public boolean showAverageFps = true;
-        public boolean showFrameTime = true;
+        public boolean showFrameTime = false;
         public boolean show1PercentLow = true;
 
         public boolean showMemory = true;
-        public boolean showCpuUsage = false;
-        public boolean showGpuUsage = false;
 
         public boolean showPing = true;
         public boolean showMspt = true;
@@ -88,7 +87,7 @@ public class ModConfig {
         public boolean showGraph = false;
         public boolean showMinMaxStats = false;
 
-        public List<String> metricOrder = new ArrayList<>(OverlayMetric.defaultOrderIds());
+        public List<String> metricOrder = new CopyOnWriteArrayList<>(OverlayMetric.defaultOrderIds());
         public Map<String, String> metricDisplayNames = new LinkedHashMap<>();
 
         public boolean isMetricEnabled(OverlayMetric metric) {
@@ -98,8 +97,6 @@ public class ModConfig {
                 case FRAME_TIME -> showFrameTime;
                 case LOW_1 -> show1PercentLow;
                 case MEMORY -> showMemory;
-                case CPU -> showCpuUsage;
-                case GPU -> showGpuUsage;
                 case PING -> showPing;
                 case MSPT -> showMspt;
                 case TPS -> showTps;
@@ -116,8 +113,6 @@ public class ModConfig {
                 case FRAME_TIME -> showFrameTime = enabled;
                 case LOW_1 -> show1PercentLow = enabled;
                 case MEMORY -> showMemory = enabled;
-                case CPU -> showCpuUsage = enabled;
-                case GPU -> showGpuUsage = enabled;
                 case PING -> showPing = enabled;
                 case MSPT -> showMspt = enabled;
                 case TPS -> showTps = enabled;
@@ -226,14 +221,23 @@ public class ModConfig {
             appearance.themePreset = ThemePreset.CLASSIC_DARK;
         }
 
+        if (general.configVersion < 6) {
+            // CPU and GPU metrics removed in v5.1
+            hud.metricOrder.remove("cpu");
+            hud.metricOrder.remove("gpu");
+            general.configVersion = 6;
+        }
+
         if (hud.metricOrder == null || hud.metricOrder.isEmpty()) {
-            hud.metricOrder = new ArrayList<>(OverlayMetric.defaultOrderIds());
+            hud.metricOrder = new CopyOnWriteArrayList<>(OverlayMetric.defaultOrderIds());
         } else {
             List<String> sanitized = new ArrayList<>();
             for (OverlayMetric metric : OverlayMetric.sanitizeOrder(hud.metricOrder)) {
                 sanitized.add(metric.getId());
             }
-            hud.metricOrder = sanitized;
+            if (!(hud.metricOrder instanceof CopyOnWriteArrayList) || !hud.metricOrder.equals(sanitized)) {
+                hud.metricOrder = new CopyOnWriteArrayList<>(sanitized);
+            }
         }
 
         if (hud.metricDisplayNames == null) {
@@ -278,9 +282,27 @@ public class ModConfig {
             loadedConfig = new ModConfig();
         }
 
+        loadedConfig.migrate();
         loadedConfig.validate();
         save(file, loadedConfig);
         return loadedConfig;
+    }
+
+    private void migrate() {
+        if (this.general == null) return;
+
+        if (this.general.configVersion < 5) {
+            LOGGER.info("Migrating config from version {} to 5", this.general.configVersion);
+            // Ensure all current metrics exist in the list during migration
+            if (this.hud != null && this.hud.metricOrder != null) {
+                for (OverlayMetric metric : OverlayMetric.values()) {
+                    if (!this.hud.metricOrder.contains(metric.getId())) {
+                        this.hud.metricOrder.add(metric.getId());
+                    }
+                }
+            }
+            this.general.configVersion = 5;
+        }
     }
 
     public static void save(File file, ModConfig config) {

@@ -100,17 +100,39 @@ def changelogContent = rootProject.file("CHANGELOG.md").exists() ? rootProject.f
 def hasCurseforgeToken = (System.getenv("CURSEFORGE_TOKEN") ?: project.findProperty("curseforge_token")) as boolean
 
 if (hasCurseforgeToken) {
-    apply plugin: 'com.matthewprenger.cursegradle'
+    apply plugin: 'net.darkhax.curseforgegradle'
 }
 
 modrinth {
     token = System.getenv("MODRINTH_TOKEN") ?: project.findProperty("modrinth_token") ?: ""
     projectId = project.modrinth_project_id
     versionNumber = "${project.mod_version}+fabric"
-    versionName = "${project.mod_name} ${project.mod_version} (Fabric)"
+    versionName = "v5.1 (Fabric)"
     versionType = "release"
     uploadFile = remapJar
-    changelog = changelogContent
+    changelog = """
+    ## FPS Overlay v5.1
+
+    This release focuses on stability, compliance, and accuracy.
+    No new features — just making sure everything that's there works perfectly.
+
+    ### Changes
+    - Fixed a thread safety issue in the performance tracking engine that could
+      cause corrupted FPS readings under heavy load
+    - Fixed a crash that could occur when reordering metrics while the overlay
+      was actively rendering
+    - Multiplayer MSPT and TPS now correctly show N/A instead of fake static values
+    - Removed CPU and GPU metrics — the only reliable way to read these required
+      spawning external system processes
+
+    ### What's in the mod (carried over from v5.0)
+    Thirteen trackable metrics: FPS, Average FPS, Frame Time, 1% Low, Ping,
+    TPS, MSPT, Memory, Coordinates, Biome, Chunks, FPS Graph, Min/Max Stats.
+
+    Full customization: drag to reposition, reorder metrics, rename labels,
+    theme presets (Classic Dark, Light, Glass), custom color palette, adaptive
+    colors, HUD scale, 10 keybinds, auto-hide on F3.
+    """
     gameVersions = [project.minecraft_version]
     loaders = ["fabric"]
     dependencies {
@@ -122,25 +144,42 @@ modrinth {
 
 def curseforgeId = project.findProperty('curseforge_project_id') ?: ''
 if (hasCurseforgeToken && curseforgeId) {
-    curseforge {
-        apiKey = System.getenv("CURSEFORGE_TOKEN") ?: project.findProperty("curseforge_token") ?: ""
-        project {
-            id = curseforgeId
-            releaseType = "release"
-            addGameVersion project.minecraft_version
-            addGameVersion "Fabric"
-            addGameVersion "Java 21"
-            changelog = changelogContent
-            changelogType = "markdown"
-            mainArtifact(remapJar)
-            relations {
-                requiredDependency 'fabric-api'
-                requiredDependency 'yacl'
-                optionalDependency 'modmenu'
-            }
-        }
+    tasks.register('publishCurseForge', net.darkhax.curseforgegradle.TaskPublishCurseForge) {
+        apiToken = System.getenv("CURSEFORGE_TOKEN") ?: project.findProperty("curseforge_token") ?: ""
+
+        def mainFile = upload(curseforgeId, remapJar)
+        mainFile.releaseType = 'release'
+        mainFile.addGameVersion(project.minecraft_version, "Fabric", "Java 21")
+        mainFile.changelog = """
+    ## FPS Overlay v5.1
+
+    This release focuses on stability, compliance, and accuracy.
+    No new features — just making sure everything that's there works perfectly.
+
+    ### Changes
+    - Fixed a thread safety issue in the performance tracking engine that could
+      cause corrupted FPS readings under heavy load
+    - Fixed a crash that could occur when reordering metrics while the overlay
+      was actively rendering
+    - Multiplayer MSPT and TPS now correctly show N/A instead of fake static values
+    - Removed CPU and GPU metrics — the only reliable way to read these required
+      spawning external system processes
+
+    ### What's in the mod (carried over from v5.0)
+    Thirteen trackable metrics: FPS, Average FPS, Frame Time, 1% Low, Ping,
+    TPS, MSPT, Memory, Coordinates, Biome, Chunks, FPS Graph, Min/Max Stats.
+
+    Full customization: drag to reposition, reorder metrics, rename labels,
+    theme presets (Classic Dark, Light, Glass), custom color palette, adaptive
+    colors, HUD scale, 10 keybinds, auto-hide on F3.
+    """
+        mainFile.changelogType = 'markdown'
+
+        mainFile.addRequirement('fabric-api', 'yacl')
+        mainFile.addOptional('modmenu')
+
+        dependsOn(remapJar)
     }
-    tasks.named("curseforge").configure { dependsOn(remapJar) }
 }
 
 tasks.named("modrinth").configure { dependsOn(remapJar) }

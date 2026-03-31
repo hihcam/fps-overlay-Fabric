@@ -366,17 +366,15 @@ public class OverlayRenderer {
                     translated(metric.getUnitKey()), tracker.getMaxMemory() > 0
                             ? (tracker.getUsedMemory() * 100.0 / tracker.getMaxMemory())
                             : null);
-            case CPU -> new OverlayLine(metric, metricLabel, formatPercent(tracker.getCurrentCpuUsage()),
-                    tracker.getCurrentCpuUsage() >= 0 ? translated(metric.getUnitKey()) : "", tracker.getCurrentCpuUsage());
-            case GPU -> new OverlayLine(metric, metricLabel, formatPercent(tracker.getCurrentGpuUsage()),
-                    tracker.getCurrentGpuUsage() >= 0 ? translated(metric.getUnitKey()) : "", tracker.getCurrentGpuUsage());
             case PING -> new OverlayLine(metric, metricLabel,
                     withMinMax(activeConfig, tracker.getCurrentPing(), tracker.getMinPing(), tracker.getMaxPing()),
                     translated(metric.getUnitKey()), (double) tracker.getCurrentPing());
             case MSPT -> new OverlayLine(metric, metricLabel,
-                    ONE_DECIMAL.get().format(tracker.getMspt()), translated(metric.getUnitKey()), tracker.getMspt());
+                    tracker.getMspt() >= 0 ? ONE_DECIMAL.get().format(tracker.getMspt()) : "N/A",
+                    translated(metric.getUnitKey()), tracker.getMspt());
             case TPS -> new OverlayLine(metric, metricLabel,
-                    ONE_DECIMAL.get().format(tracker.getTps()), translated(metric.getUnitKey()), tracker.getTps());
+                    tracker.getTps() >= 0 ? ONE_DECIMAL.get().format(tracker.getTps()) : "N/A",
+                    translated(metric.getUnitKey()), tracker.getTps());
             case CHUNKS -> new OverlayLine(metric, metricLabel,
                     tracker.getVisibleChunks() > 0
                             ? tracker.getCompletedChunks() + "/" + tracker.getVisibleChunks()
@@ -397,8 +395,6 @@ public class OverlayRenderer {
             case FRAME_TIME -> new OverlayLine(metric, metricLabel, "6.9", translated(metric.getUnitKey()), 6.9);
             case LOW_1 -> new OverlayLine(metric, metricLabel, "92", translated(metric.getUnitKey()), 92.0);
             case MEMORY -> new OverlayLine(metric, metricLabel, "3.4", translated(metric.getUnitKey()), 58.0);
-            case CPU -> new OverlayLine(metric, metricLabel, "34", translated(metric.getUnitKey()), 34.0);
-            case GPU -> new OverlayLine(metric, metricLabel, "67", translated(metric.getUnitKey()), 67.0);
             case PING -> new OverlayLine(metric, metricLabel, "42", translated(metric.getUnitKey()), 42.0);
             case MSPT -> new OverlayLine(metric, metricLabel, "18.7", translated(metric.getUnitKey()), 18.7);
             case TPS -> new OverlayLine(metric, metricLabel, "20.0", translated(metric.getUnitKey()), 20.0);
@@ -413,13 +409,6 @@ public class OverlayRenderer {
             return String.valueOf(current);
         }
         return current + " (" + min + "/" + max + ")";
-    }
-
-    private static String formatPercent(double value) {
-        if (value < 0) {
-            return "N/A";
-        }
-        return WHOLE_NUMBER.get().format(value);
     }
 
     private static String translated(String key) {
@@ -458,7 +447,7 @@ public class OverlayRenderer {
                     : value >= 30 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
             case FRAME_TIME, MSPT -> value < 16.7 ? getGoodColor(activeConfig)
                     : value < 33.3 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
-            case MEMORY, CPU, GPU, CHUNKS -> value < 75 ? getGoodColor(activeConfig)
+            case MEMORY, CHUNKS -> value < 75 ? getGoodColor(activeConfig)
                     : value < 90 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
             case PING -> value < 60 ? getGoodColor(activeConfig)
                     : value < 150 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
