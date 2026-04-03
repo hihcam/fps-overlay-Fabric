@@ -72,6 +72,10 @@ public class ConfigManager {
         LISTENERS.add(listener);
     }
 
+    public static void unregisterConfigListener(ConfigChangedCallback listener) {
+        LISTENERS.remove(listener);
+    }
+
     public static boolean isInitialized() {
         return INITIALIZED.get();
     }
@@ -80,6 +84,7 @@ public class ConfigManager {
         INITIALIZED.set(false);
         config = null;
         configFile = null;
+        LISTENERS.clear();
     }
 
     private static void notifyListeners() {

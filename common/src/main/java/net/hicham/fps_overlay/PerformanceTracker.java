@@ -1,47 +1,50 @@
 package net.hicham.fps_overlay;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 
-import java.lang.management.ManagementFactory;
-import java.lang.reflect.Method;
 import java.util.Arrays;
 
+/**
+ * Facade that coordinates all metric collection.
+ * Frame timing is delegated to {@link FrameTracker},
+ * data fetching to {@link MetricProvider}.
+ * This class owns FPS graph sampling, min/max session stats,
+ * and the update-interval gating.
+ */
 public class PerformanceTracker {
     private static final PerformanceTracker INSTANCE = new PerformanceTracker();
     private static final int GRAPH_SAMPLE_CAPACITY = 600;
     private static final long GRAPH_SAMPLE_INTERVAL_MS = 100L;
 
-
-
     private ModConfig config;
+    private final FrameTracker frameTracker = new FrameTracker();
 
+    // ── Cached metric values ────────────────────────────────────
     private int currentFps = 0;
-    private volatile double currentFrameTimeMs = 0;
-    private final java.util.concurrent.ConcurrentLinkedDeque<Long> frameTimeBuffer = new java.util.concurrent.ConcurrentLinkedDeque<>();
-    private final java.util.concurrent.atomic.AtomicLong sumOfDeltasNanos = new java.util.concurrent.atomic.AtomicLong(0);
-    private final java.util.concurrent.atomic.AtomicInteger frameBufferSize = new java.util.concurrent.atomic.AtomicInteger(0);
-    private static final int MAX_FRAME_SAMPLES = 1000;
+    private double averageFps = 0;
+    private int onePercentLow = 0;
+    private int currentPing = 0;
 
     private long usedMemory = 0;
     private long maxMemory = 0;
-    private int currentPing = 0;
-    private int onePercentLow = 0;
+
     private double currentMspt = 0;
     private double currentTps = 20.0;
+
     private int loadedChunks = 0;
     private int visibleChunks = 0;
     private int completedChunks = 0;
+
     private String coordinatesText = "0 64 0";
     private String biomeText = "Unknown";
 
+    // ── Session stats ───────────────────────────────────────────
     private int minFps = Integer.MAX_VALUE;
     private int maxFps = 0;
     private int minPing = Integer.MAX_VALUE;
     private int maxPing = 0;
-    private double averageFps = 0;
 
+    // ── Graph ───────────────────────────────────────────────────
     private final int[] fpsGraphBuffer = new int[GRAPH_SAMPLE_CAPACITY];
     private final int[] graphCopyBuffer = new int[GRAPH_SAMPLE_CAPACITY];
     private final Object graphLock = new Object();
@@ -49,7 +52,6 @@ public class PerformanceTracker {
     private int graphSize = 0;
 
     private volatile long lastUpdateTime = 0;
-    private volatile long lastFrameTimeNano = 0;
     private volatile long lastGraphSampleTime = 0;
 
     private PerformanceTracker() {
@@ -63,14 +65,12 @@ public class PerformanceTracker {
         this.config = config;
     }
 
+    // ── Tick update ─────────────────────────────────────────────
+
     public void update(Minecraft client) {
         if (config == null) {
             return;
         }
-
-        LocationData location = fetchLocationData(client);
-        coordinatesText = location.coordinates();
-        biomeText = location.biome();
 
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastUpdateTime < config.general.updateIntervalMs) {
@@ -78,58 +78,56 @@ public class PerformanceTracker {
         }
         lastUpdateTime = currentTime;
 
+        // FPS & frame analysis
         currentFps = Math.max(0, client.getFps());
-        averageFps = calculateAverageFps();
-        currentPing = fetchCurrentPing(client);
-        onePercentLow = calculateOnePercentLow();
+        averageFps = frameTracker.calculateAverageFps();
+        onePercentLow = frameTracker.calculateOnePercentLow();
+
+        // Network
+        currentPing = MetricProvider.fetchPing(client);
 
         updateMinMaxStats();
 
-        MemoryData memory = fetchMemoryData();
+        // Memory
+        MetricProvider.MemoryData memory = MetricProvider.fetchMemory();
         usedMemory = memory.used();
         maxMemory = memory.max();
 
-        TickData tick = fetchTickData(client);
+        // Tick
+        MetricProvider.TickData tick = MetricProvider.fetchTickData(client);
         currentMspt = tick.mspt();
         currentTps = tick.tps();
 
-        ChunkData chunks = fetchChunkData(client);
+        // Chunks
+        MetricProvider.ChunkData chunks = MetricProvider.fetchChunks(client);
         loadedChunks = chunks.loaded();
         visibleChunks = chunks.visible();
         completedChunks = chunks.completed();
 
+        // Location
+        MetricProvider.LocationData location = MetricProvider.fetchLocation(client);
+        coordinatesText = location.coordinates();
+        biomeText = location.biome();
+
         sampleGraph(currentTime);
     }
 
+    /**
+     * Called once per rendered frame from the render thread.
+     */
     public void recordFrame() {
-        long currentNano = System.nanoTime();
-        if (lastFrameTimeNano != 0) {
-            long delta = currentNano - lastFrameTimeNano;
-            currentFrameTimeMs = delta / 1_000_000.0;
-
-            sumOfDeltasNanos.addAndGet(delta);
-            frameTimeBuffer.addLast(delta);
-
-            if (frameBufferSize.incrementAndGet() > MAX_FRAME_SAMPLES) {
-                Long removed = frameTimeBuffer.pollFirst();
-                if (removed != null) {
-                    sumOfDeltasNanos.addAndGet(-removed);
-                    frameBufferSize.decrementAndGet();
-                }
-            }
-        }
-        lastFrameTimeNano = currentNano;
+        frameTracker.recordFrame();
     }
+
+    // ── Reset ───────────────────────────────────────────────────
 
     public void clearAverageFpsData() {
         resetSessionStats();
     }
 
     public void resetSessionStats() {
-        frameBufferSize.set(0);
+        frameTracker.reset();
         averageFps = 0;
-        sumOfDeltasNanos.set(0);
-        frameTimeBuffer.clear();
 
         synchronized (graphLock) {
             graphIndex = 0;
@@ -143,6 +141,8 @@ public class PerformanceTracker {
         maxPing = 0;
     }
 
+    // ── Graph ───────────────────────────────────────────────────
+
     public int[] copyGraphValues() {
         synchronized (graphLock) {
             int size = graphSize;
@@ -150,7 +150,6 @@ public class PerformanceTracker {
                 int sourceIndex = (graphIndex - size + i + fpsGraphBuffer.length) % fpsGraphBuffer.length;
                 graphCopyBuffer[i] = fpsGraphBuffer[sourceIndex];
             }
-            // Return a correctly-sized view
             if (size == graphCopyBuffer.length) {
                 return graphCopyBuffer;
             }
@@ -160,12 +159,14 @@ public class PerformanceTracker {
         }
     }
 
+    // ── Getters ─────────────────────────────────────────────────
+
     public int getCurrentFps() {
         return currentFps;
     }
 
     public double getCurrentFrameTimeMs() {
-        return currentFrameTimeMs;
+        return frameTracker.getCurrentFrameTimeMs();
     }
 
     public long getUsedMemory() {
@@ -232,6 +233,8 @@ public class PerformanceTracker {
         return maxPing;
     }
 
+    // ── Private helpers ─────────────────────────────────────────
+
     private void updateMinMaxStats() {
         minFps = Math.min(minFps, currentFps);
         maxFps = Math.max(maxFps, currentFps);
@@ -255,127 +258,5 @@ public class PerformanceTracker {
                 graphSize++;
             }
         }
-    }
-
-    private double calculateAverageFps() {
-        int size = frameBufferSize.get();
-        long sum = sumOfDeltasNanos.get();
-        if (size == 0 || sum <= 0) {
-            return 0;
-        }
-        return (size * 1_000_000_000.0) / sum;
-    }
-
-    private MemoryData fetchMemoryData() {
-        try {
-            Runtime runtime = Runtime.getRuntime();
-            return new MemoryData(runtime.totalMemory() - runtime.freeMemory(), runtime.maxMemory());
-        } catch (Exception e) {
-            return new MemoryData(0, 0);
-        }
-    }
-
-    private int fetchCurrentPing(Minecraft client) {
-        var handler = client.getConnection();
-        var player = client.player;
-        if (handler == null || player == null) {
-            return 0;
-        }
-
-        try {
-            var entry = handler.getPlayerInfo(player.getUUID());
-            return entry != null ? Math.max(0, entry.getLatency()) : 0;
-        } catch (Exception e) {
-            return 0;
-        }
-    }
-
-    private int calculateOnePercentLow() {
-        int size = frameBufferSize.get();
-        if (size < 10) {
-            return 0;
-        }
-
-        Long[] samples = frameTimeBuffer.toArray(new Long[0]);
-        Arrays.sort(samples);
-
-        int index = Math.max(0, samples.length - 1 - (samples.length / 100));
-        long onePercentFrameNanos = samples[index];
-
-        if (onePercentFrameNanos <= 0) {
-            return 0;
-        }
-        return (int) (1_000_000_000.0 / onePercentFrameNanos);
-    }
-
-    private TickData fetchTickData(Minecraft client) {
-        var server = client.getSingleplayerServer();
-        if (server != null) {
-            double mspt = server.getAverageTickTimeNanos() / 1_000_000.0;
-            double tps = Math.min(20.0, 1000.0 / Math.max(1.0, mspt));
-            return new TickData(mspt, tps);
-        }
-        return new TickData(-1, -1);
-    }
-
-    private ChunkData fetchChunkData(Minecraft client) {
-        if (client.level == null || client.levelRenderer == null) {
-            return new ChunkData(0, 0, 0);
-        }
-
-        int loaded = 0;
-        int visible = 0;
-        int completed = 0;
-
-        try {
-            loaded = Math.max(0, client.level.getChunkSource().getLoadedChunksCount());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            visible = Math.max(0, client.levelRenderer.countRenderedSections());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            completed = Math.max(0, client.levelRenderer.getVisibleSections().size());
-        } catch (Exception ignored) {
-            completed = visible;
-        }
-
-        return new ChunkData(loaded, visible, completed);
-    }
-
-    private LocationData fetchLocationData(Minecraft client) {
-        if (client.player == null || client.level == null) {
-            return new LocationData("0 64 0", "Unknown");
-        }
-
-        BlockPos pos = client.player.blockPosition();
-        String coordinates = pos.getX() + " " + pos.getY() + " " + pos.getZ();
-        String biome = "Unknown";
-
-        try {
-            biome = client.level.getBiome(pos)
-                    .unwrapKey()
-                    .map(key -> Component.translatable(key.identifier().toLanguageKey("biome")).getString())
-                    .orElse("Unknown");
-        } catch (Exception ignored) {
-        }
-
-        return new LocationData(coordinates, biome);
-    }
-
-
-    private record MemoryData(long used, long max) {
-    }
-
-    private record TickData(double mspt, double tps) {
-    }
-
-    private record ChunkData(int loaded, int visible, int completed) {
-    }
-
-    private record LocationData(String coordinates, String biome) {
     }
 }
