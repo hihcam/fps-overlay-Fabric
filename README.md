@@ -5,7 +5,7 @@
   
   [![Modrinth Downloads](https://img.shields.io/modrinth/dt/fps-overlay?style=flat-square&logo=modrinth&color=00AF5C)](https://modrinth.com/project/j0IQ4hjv)
   [![CurseForge Downloads](https://img.shields.io/curseforge/dt/1341801?style=flat-square&logo=curseforge&color=F16436)](https://www.curseforge.com/minecraft/mc-mods/fpsoverlay)
-  [![License](https://img.shields.io/github/license/hichamdev/fps-overlay-Fabric?style=flat-square&color=blue)](LICENSE)
+  [![License](https://img.shields.io/github/license/hihcam/fps-overlay-Fabric?style=flat-square&color=blue)](LICENSE)
 </div>
 
 <br>
