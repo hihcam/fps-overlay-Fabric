@@ -57,22 +57,69 @@ public final class ServerTickMetrics {
     }
 
     public static double getTPS() {
-        return Double.longBitsToDouble(tier1TpsBits.get());
+        long last = tier1LastReceivedNano.get();
+        if (last == 0) {
+            return Double.longBitsToDouble(tier1TpsBits.get());
+        }
+        long now = System.nanoTime();
+        double timeSinceLastPacket = (now - last) / 1_000_000_000.0;
+        double baseTps = Double.longBitsToDouble(tier1TpsBits.get());
+        if (timeSinceLastPacket > 1.5) {
+            // Sk1ght CurseForge Bug Report: Handle server freeze/lag spike gracefully.
+            double decayingTps = 20.0 / timeSinceLastPacket;
+            double estimatedTps = Math.min(baseTps, decayingTps);
+            return estimatedTps < 1.0 ? 0.0 : estimatedTps;
+        }
+        return baseTps;
     }
 
     public static double getMSPT() {
-        return Double.longBitsToDouble(tier1MsptBits.get());
+        long last = tier1LastReceivedNano.get();
+        if (last == 0) {
+            return Double.longBitsToDouble(tier1MsptBits.get());
+        }
+        long now = System.nanoTime();
+        double timeSinceLastPacket = (now - last) / 1_000_000_000.0;
+        double baseMspt = Double.longBitsToDouble(tier1MsptBits.get());
+        if (timeSinceLastPacket > 1.5) {
+            // Sk1ght CurseForge Bug Report: Show N/A for MSPT during freeze, consistent with Tier 2.
+            return -1.0;
+        }
+        return baseMspt;
     }
 
     public static double getTier2TPS() {
-        return Double.longBitsToDouble(tier2TpsBits.get());
+        long last = tier2LastReceivedNano.get();
+        if (last == 0) {
+            return Double.longBitsToDouble(tier2TpsBits.get());
+        }
+        long now = System.nanoTime();
+        double timeSinceLastPacket = (now - last) / 1_000_000_000.0;
+        double baseTps = Double.longBitsToDouble(tier2TpsBits.get());
+        if (timeSinceLastPacket > 1.5) {
+            // Sk1ght CurseForge Bug Report: Handle server freeze/lag spike gracefully.
+            double decayingTps = 20.0 / timeSinceLastPacket;
+            double estimatedTps = Math.min(baseTps, decayingTps);
+            return estimatedTps < 1.0 ? 0.0 : estimatedTps;
+        }
+        return baseTps;
     }
 
     public static boolean isTier1Active() {
-        return (System.nanoTime() - tier1LastReceivedNano.get()) < 2_000_000_000L;
+        long last = tier1LastReceivedNano.get();
+        if (last == 0) {
+            return false;
+        }
+        // Sk1ght CurseForge Bug Report: Revert to N/A after 30 seconds of total silence.
+        return (System.nanoTime() - last) < 30_000_000_000L;
     }
 
     public static boolean isTier2Active() {
-        return (System.nanoTime() - tier2LastReceivedNano.get()) < 3_000_000_000L;
+        long last = tier2LastReceivedNano.get();
+        if (last == 0) {
+            return false;
+        }
+        // Sk1ght CurseForge Bug Report: Revert to N/A after 30 seconds of total silence.
+        return (System.nanoTime() - last) < 30_000_000_000L;
     }
 }
