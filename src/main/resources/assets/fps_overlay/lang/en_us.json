@@ -155,5 +155,11 @@
   "key.fps_overlay.toggle_graph": "Toggle FPS Graph",
   "key.fps_overlay.toggle_memory": "Toggle Memory",
   "key.fps_overlay.toggle_overlay": "Toggle Overlay",
-  "key.fps_overlay.toggle_ping": "Toggle Ping"
+  "key.fps_overlay.toggle_ping": "Toggle Ping",
+  "button.fps_overlay.keybinds": "Keybinds",
+  "screen.fps_overlay.keybinds": "Keybind Settings",
+  "text.fps_overlay.keybinds_hint": "Change your keybindings, unbind them, or reset to defaults.",
+  "button.fps_overlay.unbind": "Unbind",
+  "button.fps_overlay.reset": "Reset",
+  "text.fps_overlay.press_key": "> PRESS A KEY <"
 }

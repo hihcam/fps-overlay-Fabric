@@ -103,6 +103,7 @@ public class FpsOverlayNeoForge {
                 defaultKey,
                 KEY_CATEGORY);
         keyBindingActions.add(new KeyBindingAction(binding, action));
+        FpsOverlayMod.registerKeyMapping(binding);
     }
 
     private void handleKeyBindings() {

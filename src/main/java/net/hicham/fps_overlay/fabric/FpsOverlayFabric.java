@@ -83,6 +83,7 @@ public class FpsOverlayFabric implements ClientModInitializer {
                 defaultKey,
                 KEY_CATEGORY));
         keyMappingActions.add(new KeyMappingAction(binding, action));
+        FpsOverlayMod.registerKeyMapping(binding);
     }
 
     private void handleKeyMappings() {

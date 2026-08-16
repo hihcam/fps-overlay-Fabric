@@ -16,6 +16,15 @@ public class FpsOverlayMod {
     private static final Object INIT_LOCK = new Object();
 
     private static ModConfig config;
+    private static final java.util.List<net.minecraft.client.KeyMapping> keyMappings = new java.util.ArrayList<>();
+
+    public static void registerKeyMapping(net.minecraft.client.KeyMapping mapping) {
+        keyMappings.add(mapping);
+    }
+
+    public static java.util.List<net.minecraft.client.KeyMapping> getKeyMappings() {
+        return keyMappings;
+    }
 
     public static void init() {
         LOGGER.info("Initializing Fps Overlay...");
