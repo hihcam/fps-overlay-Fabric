@@ -412,7 +412,7 @@ public class ConfigScreenFactory {
     }
 
     private static void saveProfile(ModConfig config, String name) {
-        config.saveProfile(name);
+        config.saveProfile(name, config, true);
         ConfigManager.saveConfig();
     }
 
@@ -420,7 +420,7 @@ public class ConfigScreenFactory {
         if (!hasSelectedProfile(config)) {
             return;
         }
-        config.saveProfile(config.selectedProfile);
+        config.saveProfile(config.selectedProfile, config, true);
         ConfigManager.saveConfig();
     }
 

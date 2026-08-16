@@ -68,9 +68,9 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 
 ### Profile System
 - **Status:** Done
-- **Files:** `src/main/java/net/hicham/fps_overlay/ModConfig.java`, `src/main/java/net/hicham/fps_overlay/ProfileNameScreen.java`, `src/main/java/net/hicham/fps_overlay/ProfileSelectScreen.java`, `src/main/java/net/hicham/fps_overlay/ConfigScreenFactory.java`, `src/main/resources/assets/fps_overlay/lang/en_us.json`
-- **Adaptation details:** Implemented `ModConfig.ConfigProfile` encapsulating snapshots of `General`, `HUD`, `Appearance`, `Thresholds`, and `AutoHideRules`. Profile deep-copying is performed via `ModConfig.GSON` round-trip JSON cloning, guaranteeing zero shared object references between active settings and profile snapshots. Added `saveProfile()`, `applyProfile()`, `deleteProfile()`, `renameProfile()`, and name sanitization. Implemented `configVersion` 8 → 9 migration initializing `"Default"` profile from current user settings. Created `ProfileNameScreen` (modal with input validation) and `ProfileSelectScreen` (scrollable search list with live selection highlight). Wired "Profiles" category into `ConfigScreenFactory` with action buttons (Save, Update, Rename, Delete, Select).
-- **Bugs found:** None.
+- **Files:** `src/main/java/net/hicham/fps_overlay/ModConfig.java`, `src/main/java/net/hicham/fps_overlay/ProfileNameScreen.java`, `src/main/java/net/hicham/fps_overlay/ProfileSelectScreen.java`, `src/main/java/net/hicham/fps_overlay/ConfigScreenFactory.java`, `src/main/resources/assets/fps_overlay/lang/en_us.json`, `src/test/java/net/hicham/fps_overlay/ConfigMigrationTest.java`
+- **Adaptation details:** Implemented `ModConfig.ConfigProfile` encapsulating snapshots of `General`, `HUD`, `Appearance`, `Thresholds`, and `AutoHideRules`. Profile deep-copying is performed via `ModConfig.GSON` round-trip JSON cloning, guaranteeing zero shared object references between active settings and profile snapshots. Added `saveProfile()`, `applyProfile()`, `deleteProfile()`, `renameProfile()`, with explicit collision safety (accidental overwrites blocked on save and rename unless explicitly requested). Implemented `configVersion` 8 → 9 migration initializing `"Default"` profile from current user settings. Created `ProfileNameScreen` (modal with input validation) and `ProfileSelectScreen` (scrollable search list with live selection highlight). Wired "Profiles" category into `ConfigScreenFactory` with action buttons (Save, Update, Rename, Delete, Select). Created `ConfigMigrationTest` to verify end-to-end v6-to-v9 migration, snapshot isolation, profile lifecycle, and relational boundary clamping.
+- **Bugs found:** Missing `import java.util.Set;` in `ModConfig.java` caught and fixed via compilation.
 
 ---
 
@@ -81,11 +81,15 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - **Backup Verified:** Full backup created at `D:\fps-overlay-Fabric-BACKUP-2026-08-16` prior to initiating any PR #4 merge work.
 - **Clean Base Baseline:** Commit `de3a503` marks the clean base before PR #4 merge work begins.
 - **FrameTracker Testability Overload:** Added `public void recordFrame(long currentNano)` overload to `FrameTracker.java` (with `recordFrame()` delegating to `recordFrame(System.nanoTime())`) to allow deterministic timestamp injection in tests without thread sleeping or timer resolution jitter.
-- **Standalone Test Runner vs Gradle Loom:** The Gradle `frameSamplingTest` task is configured and wired to `check`, but executing it via `./gradlew` triggers Gradle/Loom multi-project dependency resolution requiring online Maven metadata fetching. Under offline/zero-bandwidth constraints, running the compiled test suite directly via local JDK 25 (`javac` + `java`) provides deterministic verification with 0 bytes downloaded.
+- **[HARD BLOCKER] Full Loom/Gradle Build on Next Online Connection:** Full Gradle/Loom build (`./gradlew build` / `./gradlew compileJava`) cannot run offline because Loom requires online resolution of transitive Fabric API 0.152.1+26.2 metadata and Mojang runtime libraries not present in the local Gradle cache. The offline verification performed in this workspace comprises:
+  1. Full offline unit test compilation & execution of `FrameTrackerSamplingTest.java` with JDK 25.
+  2. Full offline unit test compilation & execution of `ModConfig.java` + `ConfigMigrationTest.java` with JDK 25 and `gson-2.10.1.jar`.
+  A full online `./gradlew build` remains a **hard blocker** to be executed once online bandwidth is available before release.
 - **YACL Cross-Field Threshold Ordering Validation:** YACL 3.9.4 uses static range builders for UI sliders, meaning real-time dynamic range cross-coupling (e.g. dynamically lowering Slider B's maximum while dragging Slider A on the same open screen) is not reactive within the UI builder. Full cross-field boundary constraints (e.g. `warning <= good` for FPS/TPS, `warning >= good` for latency/frame time/memory) are strictly sanitized and enforced in `ModConfig.validate()` on configuration save and load.
 - **Appearance.autoHideF3 Field Preservation:** `appearance.autoHideF3` was kept synchronized with `autoHide.hideWithF3` in `ModConfig.validate()` and migrated in v8 migration so third-party references or older saves remain fully backward compatible.
 - **Config-Screen Suppression in `shouldRenderOverlay()`:** Ported from PR #4, outside original Feature 3 brief, approved retroactively. Suppresses HUD rendering when `ConfigHubScreen`, `PositionEditorScreen`, `MetricOrderScreen`, `KeybindSettingsScreen`, or YACL config screens are open.
-- **Profile Deep-Copy Parity:** Profile serialization uses `ModConfig.GSON` (the exact `Gson` instance configured with pretty printing used across `ConfigManager`), ensuring total serialization consistency with disk JSON.
+- **Profile Deep-Copy Parity & Collision Symmetry:** Profile serialization uses `ModConfig.GSON` (the exact `Gson` instance configured with pretty printing used across `ConfigManager`), ensuring total serialization consistency with disk JSON. Collision safety is enforced symmetrically across `saveProfile` and `renameProfile`.
+- **End-to-End Migration & Deep Copy Test Suite:** `ConfigMigrationTest` executes a full v6 JSON document through `ModConfig.migrate()` and `ModConfig.validate()` to v9, verifying that pre-existing settings (such as `autoHideF3 = false`) carry into `hideWithF3` and are captured identically inside the initial `"Default"` profile.
 
 ---
 
@@ -161,17 +165,18 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - Bugs/deviations found: None.
 - Anything logged to Open Questions: Documented `Appearance.autoHideF3` backward-compatibility synchronization and screen suppression in `shouldRenderOverlay()`.
 
-**2026-08-16 — Gemini — Feature 4: Profile System**
+**2026-08-16 — Gemini — Feature 4: Profile System & Migration Suite**
 - What was done:
   1. Added `ModConfig.ConfigProfile` containing complete configuration section snapshots (`General`, `HUD`, `Appearance`, `Thresholds`, `AutoHideRules`).
   2. Implemented deep copying using `ModConfig.GSON` round-trip JSON serialization.
-  3. Added profile management methods to `ModConfig`: `saveProfile()`, `applyProfile()`, `deleteProfile()`, `renameProfile()`, and name validation.
+  3. Added profile management methods to `ModConfig`: `saveProfile()`, `applyProfile()`, `deleteProfile()`, `renameProfile()`, and name validation with symmetric collision safety.
   4. Implemented sequential config migration `configVersion` 8 → 9 capturing existing user settings as the `"Default"` profile.
   5. Created `ProfileNameScreen.java` for profile naming/renaming with real-time text validation.
   6. Created `ProfileSelectScreen.java` with instant search filtering, scroll clamping, and active profile indicator.
   7. Added "Profiles" category to `ConfigScreenFactory.java` with action buttons (Save, Update, Rename, Delete, Select).
   8. Added all profile management localization keys to `en_us.json`.
-  9. Verified test suite continues to pass under JDK 25.
-- What's left: All 4 PR #4 features are complete!
-- Bugs/deviations found: None.
-- Anything logged to Open Questions: Documented `ModConfig.GSON` deep-copy parity.
+  9. Created and executed `ConfigMigrationTest.java` verifying legacy v6 JSON migration to v9, default threshold population, preservation of `autoHideF3 = false` into `hideWithF3`, "Default" profile creation, and snapshot isolation.
+  10. Fixed missing `import java.util.Set;` in `ModConfig.java`.
+- What's left: Full online `./gradlew build` verification when bandwidth is available.
+- Bugs/deviations found: Missing `import java.util.Set;` caught by compiler and resolved.
+- Anything logged to Open Questions: Documented hard blocker for full online gradle build and logged `ConfigMigrationTest` results.

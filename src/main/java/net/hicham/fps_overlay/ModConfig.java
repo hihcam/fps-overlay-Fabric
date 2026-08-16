@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ModConfig {
@@ -251,30 +252,39 @@ public class ModConfig {
         return configProfiles != null ? configProfiles.keySet() : Set.of();
     }
 
-    public void saveProfile(String name) {
-        saveProfile(name, this);
+    public boolean saveProfile(String name) {
+        return saveProfile(name, this, false);
     }
 
-    public void saveProfile(String name, ModConfig sourceConfig) {
+    public boolean saveProfile(String name, ModConfig sourceConfig, boolean allowOverwrite) {
         String sanitizedName = sanitizeProfileName(name);
         if (sanitizedName.isEmpty()) {
-            return;
+            return false;
         }
 
         if (configProfiles == null) {
             configProfiles = new LinkedHashMap<>();
         }
 
+        if (!allowOverwrite && configProfiles.containsKey(sanitizedName) && !sanitizedName.equals(selectedProfile)) {
+            return false;
+        }
+
         ConfigProfile profile = createProfileFrom(sourceConfig == null ? this : sourceConfig);
         configProfiles.put(sanitizedName, profile);
         selectedProfile = sanitizedName;
+        return true;
     }
 
-    public void renameProfile(String oldName, String newName) {
+    public boolean renameProfile(String oldName, String newName) {
         String sanitizedOld = sanitizeProfileName(oldName);
         String sanitizedNew = sanitizeProfileName(newName);
         if (sanitizedOld.isEmpty() || sanitizedNew.isEmpty() || configProfiles == null || !configProfiles.containsKey(sanitizedOld)) {
-            return;
+            return false;
+        }
+
+        if (!sanitizedOld.equals(sanitizedNew) && configProfiles.containsKey(sanitizedNew)) {
+            return false;
         }
 
         ConfigProfile profile = configProfiles.remove(sanitizedOld);
@@ -282,6 +292,7 @@ public class ModConfig {
         if (sanitizedOld.equals(selectedProfile)) {
             selectedProfile = sanitizedNew;
         }
+        return true;
     }
 
     public void deleteProfile(String name) {
