@@ -74,9 +74,9 @@ public class ProfileSelectScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
         guiGraphics.fillGradient(0, 0, this.width, this.height, 0xD0121820, 0xE0091016);
-        guiGraphics.centeredText(font, title, this.width / 2, 16, 0xFFFFFFFF);
-        guiGraphics.centeredText(font, Component.translatable("text.fps_overlay.profile_select_hint"),
-                this.width / 2, 29, TEXT_MUTED);
+        guiGraphics.text(font, title, this.width / 2 - font.width(title) / 2, 16, 0xFFFFFFFF, false);
+        Component hint = Component.translatable("text.fps_overlay.profile_select_hint");
+        guiGraphics.text(font, hint, this.width / 2 - font.width(hint) / 2, 29, TEXT_MUTED, false);
 
         int left = getListLeft();
         int top = LIST_TOP - 4;

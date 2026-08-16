@@ -85,8 +85,8 @@ public class ProfileNameScreen extends Screen {
         guiGraphics.fill(panelX, panelY, panelX + 1, panelY + panelHeight, border);
         guiGraphics.fill(panelX + panelWidth - 1, panelY, panelX + panelWidth, panelY + panelHeight, border);
 
-        guiGraphics.centeredText(font, title, this.width / 2, panelY + 10, 0xFFFFFFFF);
-        guiGraphics.centeredText(font, statusMessage, this.width / 2, panelY + 24, statusColor);
+        guiGraphics.text(font, title, this.width / 2 - font.width(title) / 2, panelY + 10, 0xFFFFFFFF, false);
+        guiGraphics.text(font, statusMessage, this.width / 2 - font.width(statusMessage) / 2, panelY + 24, statusColor, false);
 
         super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
     }
