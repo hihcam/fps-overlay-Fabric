@@ -53,7 +53,7 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 ### Frame Sampling Tests
 - **Status:** Done
 - **Files:** `src/test/java/net/hicham/fps_overlay/FrameTrackerSamplingTest.java`, `src/main/java/net/hicham/fps_overlay/FrameTracker.java`, `build.gradle`
-- **Adaptation details:** Created `src/test/` suite targeting `FrameTracker`'s GC-free ring buffer API instead of the legacy `PerformanceTracker.recordFrame(long, boolean)`. Added non-breaking `recordFrame(long currentNano)` overload to `FrameTracker` so tests can deterministically inject timestamps. Configured `frameSamplingTest` and `check` task integration in root `build.gradle`.
+- **Adaptation details:** Created `src/test/` suite targeting `FrameTracker`'s GC-free ring buffer API instead of the legacy `PerformanceTracker.recordFrame(long, boolean)`. Added non-breaking `recordFrame(long currentNano)` overload to `FrameTracker` so tests can deterministically inject timestamps. Configured `frameSamplingTest` and `check` task integration in root `build.gradle`. Verified 0-byte steady-state heap allocation using `ThreadMXBean.getCurrentThreadAllocatedBytes()`.
 - **Bugs found:** None.
 
 ### Threshold Coloring
@@ -83,6 +83,7 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - **Backup Verified:** Full backup created at `D:\fps-overlay-Fabric-BACKUP-2026-08-16` prior to initiating any PR #4 merge work.
 - **Clean Base Baseline:** Commit `de3a503` marks the clean base before PR #4 merge work begins.
 - **FrameTracker Testability Overload:** Added `public void recordFrame(long currentNano)` overload to `FrameTracker.java` (with `recordFrame()` delegating to `recordFrame(System.nanoTime())`) to allow deterministic timestamp injection in tests without thread sleeping or timer resolution jitter.
+- **Standalone Test Runner:** Using standalone main() runner (`JavaExec`) instead of JUnit due to no-network constraint; revisit if/when bandwidth allows.
 
 ---
 
@@ -123,10 +124,10 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
      - 1% low percentile calculation with spike distributions.
      - Ring buffer capacity (1000 samples), eviction, and wraparound math without delta drift.
      - Reset method state clearance.
-     - Memory allocation flatness across 20,000 iterations.
+     - Steady-state zero heap allocation via `ThreadMXBean.getCurrentThreadAllocatedBytes()` across 20,000 iterations (asserted `0` allocated bytes).
   3. Configured `frameSamplingTest` and `check` task wiring in `build.gradle`.
   4. Executed and verified all test assertions pass cleanly under JDK 25 with zero network usage.
 - What's left:
   1. Feature 2: Threshold Coloring.
 - Bugs/deviations found: None.
-- Anything logged to Open Questions: Documented `recordFrame(long)` overload addition to `FrameTracker.java`.
+- Anything logged to Open Questions: Documented `recordFrame(long)` overload addition to `FrameTracker.java`, and documented standalone main runner rationale (no-network constraint).

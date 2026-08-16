@@ -1,5 +1,7 @@
 package net.hicham.fps_overlay;
 
+import java.lang.management.ManagementFactory;
+
 /**
  * Unit and regression tests for {@link FrameTracker}.
  * Verifies GC-free ring buffer behavior, average FPS calculations,
@@ -16,7 +18,7 @@ public final class FrameTrackerSamplingTest {
         testOnePercentLowPercentile();
         testRingBufferEvictionAndWraparound();
         testResetClearsAllData();
-        testMemoryAllocationFlatness();
+        testSteadyStateZeroAllocationAndStability();
         System.out.println("ALL FrameTrackerSamplingTest assertions passed successfully!");
     }
 
@@ -133,21 +135,46 @@ public final class FrameTrackerSamplingTest {
         assertEquals(0, tracker.calculateOnePercentLow(), "1% low after reset");
     }
 
-    private static void testMemoryAllocationFlatness() {
+    private static void testSteadyStateZeroAllocationAndStability() {
         FrameTracker tracker = new FrameTracker();
         long time = 1_000_000_000L;
         tracker.recordFrame(time);
 
-        // Run 20,000 iterations to ensure recordFrame has zero heap allocation overhead
-        for (int i = 0; i < 20_000; i++) {
+        // Warmup to trigger any JIT compilation and static initialization
+        for (int i = 0; i < 1000; i++) {
             time += 16_666_667L;
             tracker.recordFrame(time);
+        }
+
+        // Measure heap allocation via ThreadMXBean if supported by the JVM
+        java.lang.management.ThreadMXBean threadMxBean = ManagementFactory.getThreadMXBean();
+        if (threadMxBean instanceof com.sun.management.ThreadMXBean sunMxBean && sunMxBean.isThreadAllocatedMemorySupported()) {
+            long bytesBefore = sunMxBean.getCurrentThreadAllocatedBytes();
+            for (int i = 0; i < 20_000; i++) {
+                time += 16_666_667L;
+                tracker.recordFrame(time);
+            }
+            long bytesAfter = sunMxBean.getCurrentThreadAllocatedBytes();
+            long allocatedBytes = bytesAfter - bytesBefore;
+            assertEquals(0L, allocatedBytes, "recordFrame heap allocation during 20,000 iterations");
+        } else {
+            // Fallback assertion on JVMs where ThreadMXBean allocation tracking is unavailable
+            for (int i = 0; i < 20_000; i++) {
+                time += 16_666_667L;
+                tracker.recordFrame(time);
+            }
         }
 
         assertTrue(tracker.calculateAverageFps() > 0, "healthy average fps after 20k frames");
     }
 
     private static void assertEquals(int expected, int actual, String message) {
+        if (expected != actual) {
+            throw new AssertionError(message + " - Expected: " + expected + ", Actual: " + actual);
+        }
+    }
+
+    private static void assertEquals(long expected, long actual, String message) {
         if (expected != actual) {
             throw new AssertionError(message + " - Expected: " + expected + ", Actual: " + actual);
         }
