@@ -162,6 +162,7 @@ public class ConfigScreenFactory {
                                         .build())
                                 .build())
                         .build())
+                .category(buildThresholdCategory(config, defaults))
                 .category(ConfigCategory.createBuilder()
                         .name(Component.translatable("category.fps_overlay.colors"))
                         .group(OptionGroup.createBuilder()
@@ -178,6 +179,87 @@ public class ConfigScreenFactory {
                         .build())
                 .build()
                 .generateScreen(parent);
+    }
+
+    private static ConfigCategory buildThresholdCategory(ModConfig config, ModConfig defaults) {
+        return ConfigCategory.createBuilder()
+                .name(Component.translatable("category.fps_overlay.thresholds"))
+                .group(OptionGroup.createBuilder()
+                        .name(Component.translatable("group.fps_overlay.thresholds.fps"))
+                        .option(intSlider("option.fps_overlay.thresholds.fpsGood", "tooltip.fps_overlay.thresholds.fpsGood",
+                                defaults.thresholds.fpsGood, () -> config.thresholds.fpsGood,
+                                value -> config.thresholds.fpsGood = value, 1, 500, value -> Component.literal(value + " FPS")))
+                        .option(intSlider("option.fps_overlay.thresholds.fpsWarning", "tooltip.fps_overlay.thresholds.fpsWarning",
+                                defaults.thresholds.fpsWarning, () -> config.thresholds.fpsWarning,
+                                value -> config.thresholds.fpsWarning = value, 1, 500, value -> Component.literal(value + " FPS")))
+                        .build())
+                .group(OptionGroup.createBuilder()
+                        .name(Component.translatable("group.fps_overlay.thresholds.timing"))
+                        .option(doubleSlider("option.fps_overlay.thresholds.frameTimeGood", "tooltip.fps_overlay.thresholds.frameTimeGood",
+                                defaults.thresholds.frameTimeGood, () -> config.thresholds.frameTimeGood,
+                                value -> config.thresholds.frameTimeGood = value, 0.1, 200.0,
+                                value -> Component.literal(String.format(Locale.ROOT, "%.1f ms", value))))
+                        .option(doubleSlider("option.fps_overlay.thresholds.frameTimeWarning", "tooltip.fps_overlay.thresholds.frameTimeWarning",
+                                defaults.thresholds.frameTimeWarning, () -> config.thresholds.frameTimeWarning,
+                                value -> config.thresholds.frameTimeWarning = value, 0.1, 200.0,
+                                value -> Component.literal(String.format(Locale.ROOT, "%.1f ms", value))))
+                        .build())
+                .group(OptionGroup.createBuilder()
+                        .name(Component.translatable("group.fps_overlay.thresholds.network"))
+                        .option(intSlider("option.fps_overlay.thresholds.pingGood", "tooltip.fps_overlay.thresholds.pingGood",
+                                defaults.thresholds.pingGood, () -> config.thresholds.pingGood,
+                                value -> config.thresholds.pingGood = value, 0, 1000, value -> Component.literal(value + " ms")))
+                        .option(intSlider("option.fps_overlay.thresholds.pingWarning", "tooltip.fps_overlay.thresholds.pingWarning",
+                                defaults.thresholds.pingWarning, () -> config.thresholds.pingWarning,
+                                value -> config.thresholds.pingWarning = value, 0, 2000, value -> Component.literal(value + " ms")))
+                        .build())
+                .group(OptionGroup.createBuilder()
+                        .name(Component.translatable("group.fps_overlay.thresholds.server"))
+                        .option(doubleSlider("option.fps_overlay.thresholds.tpsGood", "tooltip.fps_overlay.thresholds.tpsGood",
+                                defaults.thresholds.tpsGood, () -> config.thresholds.tpsGood,
+                                value -> config.thresholds.tpsGood = value, 0.1, 20.0,
+                                value -> Component.literal(String.format(Locale.ROOT, "%.1f TPS", value))))
+                        .option(doubleSlider("option.fps_overlay.thresholds.tpsWarning", "tooltip.fps_overlay.thresholds.tpsWarning",
+                                defaults.thresholds.tpsWarning, () -> config.thresholds.tpsWarning,
+                                value -> config.thresholds.tpsWarning = value, 0.1, 20.0,
+                                value -> Component.literal(String.format(Locale.ROOT, "%.1f TPS", value))))
+                        .build())
+                .group(OptionGroup.createBuilder()
+                        .name(Component.translatable("group.fps_overlay.thresholds.resources"))
+                        .option(intSlider("option.fps_overlay.thresholds.memoryGood", "tooltip.fps_overlay.thresholds.memoryGood",
+                                defaults.thresholds.memoryGood, () -> config.thresholds.memoryGood,
+                                value -> config.thresholds.memoryGood = value, 1, 100, value -> Component.literal(value + "%")))
+                        .option(intSlider("option.fps_overlay.thresholds.memoryWarning", "tooltip.fps_overlay.thresholds.memoryWarning",
+                                defaults.thresholds.memoryWarning, () -> config.thresholds.memoryWarning,
+                                value -> config.thresholds.memoryWarning = value, 1, 100, value -> Component.literal(value + "%")))
+                        .build())
+                .build();
+    }
+
+    private static Option<Integer> intSlider(String key, String tooltipKey, int defaultValue, java.util.function.Supplier<Integer> getter,
+                                            java.util.function.Consumer<Integer> setter, int min, int max, java.util.function.Function<Integer, Component> formatter) {
+        return Option.<Integer>createBuilder()
+                .name(Component.translatable(key))
+                .description(OptionDescription.of(Component.translatable(tooltipKey)))
+                .binding(defaultValue, getter, setter)
+                .controller(builder -> IntegerSliderControllerBuilder.create(builder)
+                        .range(min, max)
+                        .step(1)
+                        .formatValue(formatter::apply))
+                .build();
+    }
+
+    private static Option<Double> doubleSlider(String key, String tooltipKey, double defaultValue, java.util.function.Supplier<Double> getter,
+                                               java.util.function.Consumer<Double> setter, double min, double max, java.util.function.Function<Double, Component> formatter) {
+        return Option.<Double>createBuilder()
+                .name(Component.translatable(key))
+                .description(OptionDescription.of(Component.translatable(tooltipKey)))
+                .binding(defaultValue, getter, setter)
+                .controller(builder -> DoubleSliderControllerBuilder.create(builder)
+                        .range(min, max)
+                        .step(0.1)
+                        .formatValue(formatter::apply))
+                .build();
     }
 
     private static Option<Color> colorOption(String key, int defaultValue, java.util.function.Supplier<Integer> getter, java.util.function.Consumer<Integer> setter, ModConfig config) {

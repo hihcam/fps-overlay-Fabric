@@ -444,17 +444,19 @@ public class OverlayRenderer {
         }
 
         double value = line.adaptiveValue();
+        ModConfig.Thresholds thresholds = activeConfig.thresholds != null ? activeConfig.thresholds : new ModConfig.Thresholds();
+
         return switch (line.metric()) {
-            case FPS, AVG_FPS, LOW_1 -> value >= 60 ? getGoodColor(activeConfig)
-                    : value >= 30 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
-            case FRAME_TIME, MSPT -> value < 16.7 ? getGoodColor(activeConfig)
-                    : value < 33.3 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
-            case MEMORY, CHUNKS -> value < 75 ? getGoodColor(activeConfig)
-                    : value < 90 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
-            case PING -> value < 60 ? getGoodColor(activeConfig)
-                    : value < 150 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
-            case TPS -> value >= 19.5 ? getGoodColor(activeConfig)
-                    : value >= 15 ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case FPS, AVG_FPS, LOW_1 -> value >= thresholds.fpsGood ? getGoodColor(activeConfig)
+                    : value >= thresholds.fpsWarning ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case FRAME_TIME, MSPT -> value < thresholds.frameTimeGood ? getGoodColor(activeConfig)
+                    : value < thresholds.frameTimeWarning ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case MEMORY, CHUNKS -> value < thresholds.memoryGood ? getGoodColor(activeConfig)
+                    : value < thresholds.memoryWarning ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case PING -> value < thresholds.pingGood ? getGoodColor(activeConfig)
+                    : value < thresholds.pingWarning ? getWarningColor(activeConfig) : getBadColor(activeConfig);
+            case TPS -> value >= thresholds.tpsGood ? getGoodColor(activeConfig)
+                    : value >= thresholds.tpsWarning ? getWarningColor(activeConfig) : getBadColor(activeConfig);
             case COORDS, BIOME -> getValueColor(activeConfig);
         };
     }

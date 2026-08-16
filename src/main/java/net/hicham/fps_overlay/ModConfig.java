@@ -62,12 +62,13 @@ public class ModConfig {
     public General general = new General();
     public HUD hud = new HUD();
     public Appearance appearance = new Appearance();
+    public Thresholds thresholds = new Thresholds();
 
     public static class General {
         public boolean enabled = true;
         public boolean enableKeybindings = true;
         public int updateIntervalMs = 250;
-        public int configVersion = 6;
+        public int configVersion = 7;
     }
 
     public static class HUD {
@@ -204,6 +205,19 @@ public class ModConfig {
         }
     }
 
+    public static class Thresholds {
+        public int fpsGood = 60;
+        public int fpsWarning = 30;
+        public double frameTimeGood = 16.7;
+        public double frameTimeWarning = 33.3;
+        public int memoryGood = 75;
+        public int memoryWarning = 90;
+        public int pingGood = 60;
+        public int pingWarning = 150;
+        public double tpsGood = 19.5;
+        public double tpsWarning = 15.0;
+    }
+
     public void validate() {
         general.updateIntervalMs = Math.max(16, Math.min(1000, general.updateIntervalMs));
 
@@ -221,6 +235,24 @@ public class ModConfig {
         if (appearance.themePreset == null) {
             appearance.themePreset = ThemePreset.CLASSIC_DARK;
         }
+
+        if (thresholds == null) {
+            thresholds = new Thresholds();
+        }
+        thresholds.fpsGood = Math.max(1, Math.min(1000, thresholds.fpsGood));
+        thresholds.fpsWarning = Math.max(1, Math.min(thresholds.fpsGood, thresholds.fpsWarning));
+
+        thresholds.frameTimeGood = Math.max(0.1, Math.min(500.0, thresholds.frameTimeGood));
+        thresholds.frameTimeWarning = Math.max(thresholds.frameTimeGood, Math.min(1000.0, thresholds.frameTimeWarning));
+
+        thresholds.memoryGood = Math.max(1, Math.min(100, thresholds.memoryGood));
+        thresholds.memoryWarning = Math.max(thresholds.memoryGood, Math.min(100, thresholds.memoryWarning));
+
+        thresholds.pingGood = Math.max(0, Math.min(2000, thresholds.pingGood));
+        thresholds.pingWarning = Math.max(thresholds.pingGood, Math.min(5000, thresholds.pingWarning));
+
+        thresholds.tpsGood = Math.max(0.1, Math.min(20.0, thresholds.tpsGood));
+        thresholds.tpsWarning = Math.max(0.1, Math.min(thresholds.tpsGood, thresholds.tpsWarning));
 
         if (general.configVersion < 6) {
             // CPU and GPU metrics removed in v5.1
@@ -264,6 +296,7 @@ public class ModConfig {
         this.general = new General();
         this.hud = new HUD();
         this.appearance = new Appearance();
+        this.thresholds = new Thresholds();
         validate();
     }
 
@@ -303,6 +336,14 @@ public class ModConfig {
                 }
             }
             this.general.configVersion = 5;
+        }
+
+        if (this.general.configVersion < 7) {
+            LOGGER.info("Migrating config from version {} to 7", this.general.configVersion);
+            if (this.thresholds == null) {
+                this.thresholds = new Thresholds();
+            }
+            this.general.configVersion = 7;
         }
     }
 

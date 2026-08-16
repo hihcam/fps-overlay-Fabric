@@ -57,10 +57,10 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - **Bugs found:** None.
 
 ### Threshold Coloring
-- **Status:** Not started (main has hardcoded ranges only — see Ground Rule 3)
-- **Files (PR #4):** `ModConfig.java` (`Thresholds` class), `ConfigScreenFactory.java`, `OverlayRenderer.java` (`getMetricColor()`)
-- **Adaptation needed:** Wrap existing hardcoded FPS/frame-time/memory/ping/TPS cutoffs into configurable fields; add YACL range controls; keep existing color pickers as-is.
-- **Bugs found:** —
+- **Status:** Done
+- **Files:** `src/main/java/net/hicham/fps_overlay/ModConfig.java`, `src/main/java/net/hicham/fps_overlay/OverlayRenderer.java`, `src/main/java/net/hicham/fps_overlay/ConfigScreenFactory.java`, `src/main/resources/assets/fps_overlay/lang/en_us.json`
+- **Adaptation details:** Created `Thresholds` section in `ModConfig` populated with the exact pre-existing defaults from `OverlayRenderer` (FPS 60/30, Frame Time 16.7/33.3, Memory 75/90, Ping 60/150, TPS 19.5/15.0). Added migration from `configVersion` 6 → 7. Replaced hardcoded cutoffs in `OverlayRenderer.getAdaptiveColor()` with activeConfig reads while keeping existing color configuration untouched. Added "Warning Thresholds" category in YACL GUI (`ConfigScreenFactory`) with 10 numeric sliders.
+- **Bugs found:** None.
 
 ### Auto-Hide Rules
 - **Status:** Not started (main has `autoHideF3` only — see Ground Rule 3)
@@ -84,6 +84,7 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - **Clean Base Baseline:** Commit `de3a503` marks the clean base before PR #4 merge work begins.
 - **FrameTracker Testability Overload:** Added `public void recordFrame(long currentNano)` overload to `FrameTracker.java` (with `recordFrame()` delegating to `recordFrame(System.nanoTime())`) to allow deterministic timestamp injection in tests without thread sleeping or timer resolution jitter.
 - **Standalone Test Runner:** Using standalone main() runner (`JavaExec`) instead of JUnit due to no-network constraint; revisit if/when bandwidth allows.
+- **YACL Cross-Field Threshold Ordering Validation:** YACL 3.9.4 uses static range builders for UI sliders, meaning real-time dynamic range cross-coupling (e.g. dynamically lowering Slider B's maximum while dragging Slider A on the same open screen) is not reactive within the UI builder. Full cross-field boundary constraints (e.g. `warning <= good` for FPS/TPS, `warning >= good` for latency/frame time/memory) are strictly sanitized and enforced in `ModConfig.validate()` on configuration save and load.
 
 ---
 
@@ -131,3 +132,16 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
   1. Feature 2: Threshold Coloring.
 - Bugs/deviations found: None.
 - Anything logged to Open Questions: Documented `recordFrame(long)` overload addition to `FrameTracker.java`, and documented standalone main runner rationale (no-network constraint).
+
+**2026-08-16 — Gemini — Feature 2: Threshold Coloring**
+- What was done:
+  1. Added `ModConfig.Thresholds` section with defaults matching pre-existing hardcoded values (FPS: 60/30, Frame Time: 16.7/33.3, Memory: 75/90, Ping: 60/150, TPS: 19.5/15.0).
+  2. Implemented config migration `configVersion` 6 → 7 in `ModConfig.migrate()` and cross-field boundary sanitization in `ModConfig.validate()`.
+  3. Replaced hardcoded comparisons in `OverlayRenderer.getAdaptiveColor()` with `activeConfig.thresholds.*` while preserving color getters and appearance colors.
+  4. Added "Warning Thresholds" category to `ConfigScreenFactory.java` with 10 numeric sliders organized by metric type (FPS, Timing, Network, Server, Resource).
+  5. Added localization keys to `en_us.json` for category, groups, options, and tooltips.
+  6. Verified test suite continues to pass under JDK 25.
+- What's left:
+  1. Feature 3: Auto-Hide Rules.
+- Bugs/deviations found: None.
+- Anything logged to Open Questions: Documented YACL static slider vs `ModConfig.validate()` cross-field ordering handling.
