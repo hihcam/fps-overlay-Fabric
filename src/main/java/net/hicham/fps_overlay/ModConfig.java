@@ -63,12 +63,13 @@ public class ModConfig {
     public HUD hud = new HUD();
     public Appearance appearance = new Appearance();
     public Thresholds thresholds = new Thresholds();
+    public AutoHideRules autoHide = new AutoHideRules();
 
     public static class General {
         public boolean enabled = true;
         public boolean enableKeybindings = true;
         public int updateIntervalMs = 250;
-        public int configVersion = 7;
+        public int configVersion = 8;
     }
 
     public static class HUD {
@@ -218,6 +219,16 @@ public class ModConfig {
         public double tpsWarning = 15.0;
     }
 
+    public static class AutoHideRules {
+        public boolean hideInChat = false;
+        public boolean hideInInventory = false;
+        public boolean hideInScreenshots = false;
+        public boolean hideWithF3 = true;
+        public boolean fadeOnIdle = false;
+        public int fadeDelaySeconds = 30;
+        public float fadeOpacity = 0.35f;
+    }
+
     public void validate() {
         general.updateIntervalMs = Math.max(16, Math.min(1000, general.updateIntervalMs));
 
@@ -253,6 +264,13 @@ public class ModConfig {
 
         thresholds.tpsGood = Math.max(0.1, Math.min(20.0, thresholds.tpsGood));
         thresholds.tpsWarning = Math.max(0.1, Math.min(thresholds.tpsGood, thresholds.tpsWarning));
+
+        if (autoHide == null) {
+            autoHide = new AutoHideRules();
+        }
+        autoHide.fadeDelaySeconds = Math.max(1, Math.min(600, autoHide.fadeDelaySeconds));
+        autoHide.fadeOpacity = Math.max(0.0f, Math.min(1.0f, autoHide.fadeOpacity));
+        appearance.autoHideF3 = autoHide.hideWithF3;
 
         if (general.configVersion < 6) {
             // CPU and GPU metrics removed in v5.1
@@ -297,6 +315,7 @@ public class ModConfig {
         this.hud = new HUD();
         this.appearance = new Appearance();
         this.thresholds = new Thresholds();
+        this.autoHide = new AutoHideRules();
         validate();
     }
 
@@ -344,6 +363,17 @@ public class ModConfig {
                 this.thresholds = new Thresholds();
             }
             this.general.configVersion = 7;
+        }
+
+        if (this.general.configVersion < 8) {
+            LOGGER.info("Migrating config from version {} to 8", this.general.configVersion);
+            if (this.autoHide == null) {
+                this.autoHide = new AutoHideRules();
+            }
+            if (this.appearance != null) {
+                this.autoHide.hideWithF3 = this.appearance.autoHideF3;
+            }
+            this.general.configVersion = 8;
         }
     }
 

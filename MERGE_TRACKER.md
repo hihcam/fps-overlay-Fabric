@@ -11,7 +11,7 @@
 ## 0. Ground Rules (do not deviate without flagging it here first)
 
 1. **Directory structure:** Keep `main`'s current layout (root Fabric project + `neoforge/` subfolder). Do **not** adopt PR #4's `common/`/`fabric/`/`neoforge/` restructure.
-2. **Config versioning:** Increment sequentially from the current version (**6 → 7**, not jumping to PR #4's 17). Every schema change must include a `migrate()` step so existing user JSON configs don't break.
+2. **Config versioning:** Increment sequentially from the current version (**6 → 7 → 8**, not jumping to PR #4's 17). Every schema change must include a `migrate()` step so existing user JSON configs don't break.
 3. **Two features are extensions, not ports** — do not copy PR #4's implementation wholesale for these:
    - **Threshold Coloring** — main already has color config (`goodColor`/`warningColor`/`badColor`). The task is to make the *existing hardcoded numeric cutoffs* in `OverlayRenderer.java` (~lines 446–460) configurable and expose them in the YACL screen — not rebuild coloring from scratch.
    - **Auto-Hide Rules** — main already has `autoHideF3` (boolean, in `ModConfig.Appearance`). The task is to fold this into a new `AutoHideRules` structure alongside chat/inventory/screenshot/idle-fade detection, without breaking existing users' saved `autoHideF3` setting.
@@ -63,15 +63,15 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - **Bugs found:** None.
 
 ### Auto-Hide Rules
-- **Status:** Not started (main has `autoHideF3` only — see Ground Rule 3)
-- **Files (PR #4):** `ModConfig.java` (`AutoHideRules` class), `ConfigScreenFactory.java`, `FpsOverlayMod.java` (`shouldRenderOverlay()`), `PerformanceTracker.java` (idle timestamp/fade alpha), `OverlayRenderer.java` (alpha blending)
-- **Adaptation needed:** Migrate `autoHideF3` into new structure without losing existing user setting; add alpha blending across all rendered elements (text, backgrounds, dividers, graphs).
-- **Bugs found:** —
+- **Status:** Done
+- **Files:** `src/main/java/net/hicham/fps_overlay/ModConfig.java`, `src/main/java/net/hicham/fps_overlay/FpsOverlayMod.java`, `src/main/java/net/hicham/fps_overlay/PerformanceTracker.java`, `src/main/java/net/hicham/fps_overlay/OverlayRenderer.java`, `src/main/java/net/hicham/fps_overlay/ConfigScreenFactory.java`, `src/main/resources/assets/fps_overlay/lang/en_us.json`
+- **Adaptation details:** Created `ModConfig.AutoHideRules` containing `hideInChat`, `hideInInventory`, `hideInScreenshots`, `hideWithF3`, `fadeOnIdle`, `fadeDelaySeconds`, and `fadeOpacity`. Implemented `configVersion` 7 → 8 migration copying `appearance.autoHideF3` into `autoHide.hideWithF3`. Extended `FpsOverlayMod.shouldRenderOverlay()` to detect screen types (Chat, Containers, Config screens) and screenshot key state. Implemented idle movement tracking and `getFadeAlpha()` in `PerformanceTracker`. Implemented full alpha blending pipeline (`applyAlpha()`) across background rounded rects, text shadows, outlines, dividers, and graph bars in `OverlayRenderer`. Added dedicated "Auto-Hide" category in `ConfigScreenFactory` and added localization strings to `en_us.json`.
+- **Bugs found:** None.
 
 ### Profile System
 - **Status:** Not started
 - **Files (PR #4):** `ModConfig.java` (`ConfigProfile`), `ConfigHubScreen.java`, new `ProfileNameScreen.java`, new `ProfileSelectScreen.java`, `en_us.json`
-- **Adaptation needed:** Serialize main's actual config fields (General/HUD/Appearance + new Thresholds/AutoHideRules once those land + any keybind config).
+- **Adaptation needed:** Serialize main's actual config fields (General/HUD/Appearance + Thresholds + AutoHideRules).
 - **Bugs found:** —
 
 ---
@@ -83,8 +83,9 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - **Backup Verified:** Full backup created at `D:\fps-overlay-Fabric-BACKUP-2026-08-16` prior to initiating any PR #4 merge work.
 - **Clean Base Baseline:** Commit `de3a503` marks the clean base before PR #4 merge work begins.
 - **FrameTracker Testability Overload:** Added `public void recordFrame(long currentNano)` overload to `FrameTracker.java` (with `recordFrame()` delegating to `recordFrame(System.nanoTime())`) to allow deterministic timestamp injection in tests without thread sleeping or timer resolution jitter.
-- **Standalone Test Runner:** Using standalone main() runner (`JavaExec`) instead of JUnit due to no-network constraint; revisit if/when bandwidth allows.
+- **Standalone Test Runner vs Gradle Loom:** The Gradle `frameSamplingTest` task is configured and wired to `check`, but executing it via `./gradlew` triggers Gradle/Loom multi-project dependency resolution requiring online Maven metadata fetching. Under offline/zero-bandwidth constraints, running the compiled test suite directly via local JDK 25 (`javac` + `java`) provides deterministic verification with 0 bytes downloaded.
 - **YACL Cross-Field Threshold Ordering Validation:** YACL 3.9.4 uses static range builders for UI sliders, meaning real-time dynamic range cross-coupling (e.g. dynamically lowering Slider B's maximum while dragging Slider A on the same open screen) is not reactive within the UI builder. Full cross-field boundary constraints (e.g. `warning <= good` for FPS/TPS, `warning >= good` for latency/frame time/memory) are strictly sanitized and enforced in `ModConfig.validate()` on configuration save and load.
+- **Appearance.autoHideF3 Field Preservation:** `appearance.autoHideF3` was kept synchronized with `autoHide.hideWithF3` in `ModConfig.validate()` and migrated in v8 migration so third-party references or older saves remain fully backward compatible.
 
 ---
 
@@ -145,3 +146,17 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
   1. Feature 3: Auto-Hide Rules.
 - Bugs/deviations found: None.
 - Anything logged to Open Questions: Documented YACL static slider vs `ModConfig.validate()` cross-field ordering handling.
+
+**2026-08-16 — Gemini — Feature 3: Auto-Hide Rules**
+- What was done:
+  1. Added `ModConfig.AutoHideRules` containing `hideInChat`, `hideInInventory`, `hideInScreenshots`, `hideWithF3`, `fadeOnIdle`, `fadeDelaySeconds`, `fadeOpacity`.
+  2. Implemented sequential config migration `configVersion` 7 → 8 in `ModConfig.migrate()` preserving existing `appearance.autoHideF3` value into `autoHide.hideWithF3`.
+  3. Extended `FpsOverlayMod.shouldRenderOverlay()` to detect screen types (Chat, Containers, Config screens) and screenshot key state.
+  4. Implemented player movement tracking and `getFadeAlpha()` in `PerformanceTracker`.
+  5. Added full alpha blending pipeline (`applyAlpha()`) across background rounded rects, text shadows, outlines, dividers, and graph bars in `OverlayRenderer`.
+  6. Added "Auto-Hide" category in `ConfigScreenFactory` and added localization strings to `en_us.json`.
+  7. Verified test suite continues to pass under JDK 25.
+- What's left:
+  1. Feature 4: Profile System.
+- Bugs/deviations found: None.
+- Anything logged to Open Questions: Documented `Appearance.autoHideF3` backward-compatibility synchronization.

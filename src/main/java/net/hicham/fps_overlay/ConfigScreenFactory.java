@@ -132,11 +132,6 @@ public class ConfigScreenFactory {
                                                 .formatValue(value -> Component.literal(value + " (" + (int)(value * 100 / 255f) + "%)")))
                                         .build())
                                 .option(Option.<Boolean>createBuilder()
-                                        .name(Component.translatable("option.fps_overlay.autoHideF3"))
-                                        .binding(defaults.appearance.autoHideF3, () -> config.appearance.autoHideF3, value -> config.appearance.autoHideF3 = value)
-                                        .controller(TickBoxControllerBuilder::create)
-                                        .build())
-                                .option(Option.<Boolean>createBuilder()
                                         .name(Component.translatable("option.fps_overlay.adaptiveColors"))
                                         .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.adaptiveColors")))
                                         .binding(defaults.appearance.adaptiveColors, () -> config.appearance.adaptiveColors, value -> config.appearance.adaptiveColors = value)
@@ -162,6 +157,7 @@ public class ConfigScreenFactory {
                                         .build())
                                 .build())
                         .build())
+                .category(buildAutoHideCategory(config, defaults))
                 .category(buildThresholdCategory(config, defaults))
                 .category(ConfigCategory.createBuilder()
                         .name(Component.translatable("category.fps_overlay.colors"))
@@ -258,6 +254,68 @@ public class ConfigScreenFactory {
                 .controller(builder -> DoubleSliderControllerBuilder.create(builder)
                         .range(min, max)
                         .step(0.1)
+                        .formatValue(formatter::apply))
+                .build();
+    }
+
+    private static ConfigCategory buildAutoHideCategory(ModConfig config, ModConfig defaults) {
+        return ConfigCategory.createBuilder()
+                .name(Component.translatable("category.fps_overlay.autohide"))
+                .group(OptionGroup.createBuilder()
+                        .name(Component.translatable("category.fps_overlay.autohide"))
+                        .option(Option.<Boolean>createBuilder()
+                                .name(Component.translatable("option.fps_overlay.autohide.f3"))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.autohide.f3")))
+                                .binding(defaults.autoHide.hideWithF3, () -> config.autoHide.hideWithF3, value -> {
+                                    config.autoHide.hideWithF3 = value;
+                                    config.appearance.autoHideF3 = value;
+                                })
+                                .controller(TickBoxControllerBuilder::create)
+                                .build())
+                        .option(Option.<Boolean>createBuilder()
+                                .name(Component.translatable("option.fps_overlay.autohide.chat"))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.autohide.chat")))
+                                .binding(defaults.autoHide.hideInChat, () -> config.autoHide.hideInChat, value -> config.autoHide.hideInChat = value)
+                                .controller(TickBoxControllerBuilder::create)
+                                .build())
+                        .option(Option.<Boolean>createBuilder()
+                                .name(Component.translatable("option.fps_overlay.autohide.inventory"))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.autohide.inventory")))
+                                .binding(defaults.autoHide.hideInInventory, () -> config.autoHide.hideInInventory, value -> config.autoHide.hideInInventory = value)
+                                .controller(TickBoxControllerBuilder::create)
+                                .build())
+                        .option(Option.<Boolean>createBuilder()
+                                .name(Component.translatable("option.fps_overlay.autohide.screenshot"))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.autohide.screenshot")))
+                                .binding(defaults.autoHide.hideInScreenshots, () -> config.autoHide.hideInScreenshots, value -> config.autoHide.hideInScreenshots = value)
+                                .controller(TickBoxControllerBuilder::create)
+                                .build())
+                        .option(Option.<Boolean>createBuilder()
+                                .name(Component.translatable("option.fps_overlay.autohide.fade"))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.autohide.fade")))
+                                .binding(defaults.autoHide.fadeOnIdle, () -> config.autoHide.fadeOnIdle, value -> config.autoHide.fadeOnIdle = value)
+                                .controller(TickBoxControllerBuilder::create)
+                                .build())
+                        .option(intSlider("option.fps_overlay.autohide.delay", "tooltip.fps_overlay.autohide.delay",
+                                defaults.autoHide.fadeDelaySeconds, () -> config.autoHide.fadeDelaySeconds,
+                                value -> config.autoHide.fadeDelaySeconds = value, 1, 300, value -> Component.literal(value + "s")))
+                        .option(floatSlider("option.fps_overlay.autohide.opacity", "tooltip.fps_overlay.autohide.opacity",
+                                defaults.autoHide.fadeOpacity, () -> config.autoHide.fadeOpacity,
+                                value -> config.autoHide.fadeOpacity = value, 0.0f, 1.0f, 0.05f,
+                                value -> Component.literal((int) (value * 100) + "%")))
+                        .build())
+                .build();
+    }
+
+    private static Option<Float> floatSlider(String key, String tooltipKey, float defaultValue, java.util.function.Supplier<Float> getter,
+                                            java.util.function.Consumer<Float> setter, float min, float max, float step, java.util.function.Function<Float, Component> formatter) {
+        return Option.<Float>createBuilder()
+                .name(Component.translatable(key))
+                .description(OptionDescription.of(Component.translatable(tooltipKey)))
+                .binding(defaultValue, getter, setter)
+                .controller(builder -> FloatSliderControllerBuilder.create(builder)
+                        .range(min, max)
+                        .step(step)
                         .formatValue(formatter::apply))
                 .build();
     }

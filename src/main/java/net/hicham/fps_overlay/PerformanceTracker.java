@@ -54,6 +54,14 @@ public class PerformanceTracker {
     private volatile long lastUpdateTime = 0;
     private volatile long lastGraphSampleTime = 0;
 
+    // ── Idle Activity ───────────────────────────────────────────
+    private long lastInputTime = System.currentTimeMillis();
+    private double lastPlayerX = 0;
+    private double lastPlayerY = 0;
+    private double lastPlayerZ = 0;
+    private float lastPlayerYRot = 0;
+    private float lastPlayerXRot = 0;
+
     private PerformanceTracker() {
     }
 
@@ -73,6 +81,23 @@ public class PerformanceTracker {
         }
 
         long currentTime = System.currentTimeMillis();
+
+        if (client.player != null) {
+            double px = client.player.getX();
+            double py = client.player.getY();
+            double pz = client.player.getZ();
+            float yRot = client.player.getYRot();
+            float xRot = client.player.getXRot();
+            if (px != lastPlayerX || py != lastPlayerY || pz != lastPlayerZ || yRot != lastPlayerYRot || xRot != lastPlayerXRot) {
+                lastInputTime = currentTime;
+                lastPlayerX = px;
+                lastPlayerY = py;
+                lastPlayerZ = pz;
+                lastPlayerYRot = yRot;
+                lastPlayerXRot = xRot;
+            }
+        }
+
         if (currentTime - lastUpdateTime < config.general.updateIntervalMs) {
             return;
         }
@@ -121,6 +146,21 @@ public class PerformanceTracker {
         }
     }
 
+    public float getFadeAlpha(ModConfig.AutoHideRules rules) {
+        if (rules == null || !rules.fadeOnIdle) {
+            return 1.0f;
+        }
+
+        long idleDuration = System.currentTimeMillis() - lastInputTime;
+        long thresholdMs = rules.fadeDelaySeconds * 1000L;
+        if (idleDuration <= thresholdMs) {
+            return 1.0f;
+        }
+
+        float fadeProgress = Math.min(1.0f, (idleDuration - thresholdMs) / 1000.0f);
+        return 1.0f - fadeProgress * (1.0f - rules.fadeOpacity);
+    }
+
     /**
      * Called once per rendered frame from the render thread.
      */
@@ -138,6 +178,7 @@ public class PerformanceTracker {
         frameTracker.reset();
         OverlayRenderer.resetGraphScale();
         averageFps = 0;
+        lastInputTime = System.currentTimeMillis();
 
         synchronized (graphLock) {
             graphIndex = 0;

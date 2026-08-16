@@ -54,14 +54,51 @@ public class FpsOverlayMod {
 
     public static boolean shouldRenderOverlay() {
         Minecraft client = Minecraft.getInstance();
-        return MOD_INITIALIZED.get()
-                && config != null
-                && config.general.enabled
-                && client != null
-                && client.player != null
-                && client.level != null
-                && client.font != null
-                && !client.gui.hud.isHidden();
+        if (!MOD_INITIALIZED.get()
+                || config == null
+                || !config.general.enabled
+                || client == null
+                || client.player == null
+                || client.level == null
+                || client.font == null
+                || client.gui.hud.isHidden()) {
+            return false;
+        }
+
+        Screen screen = client.screen;
+        if (screen instanceof ConfigHubScreen
+                || screen instanceof PositionEditorScreen
+                || screen instanceof MetricOrderScreen
+                || screen instanceof KeybindSettingsScreen
+                || (screen != null && screen.getClass().getName().startsWith("dev.isxander.yacl3"))) {
+            return false;
+        }
+
+        ModConfig.AutoHideRules rules = config.autoHide;
+        if (rules != null) {
+            if (rules.hideWithF3 && client.getDebugOverlay().showDebugScreen()) {
+                return false;
+            }
+            if (rules.hideInChat && screen instanceof net.minecraft.client.gui.screens.ChatScreen) {
+                return false;
+            }
+            if (rules.hideInInventory && screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>) {
+                return false;
+            }
+            if (rules.hideInScreenshots && client.options.keyScreenshot.isDown()) {
+                return false;
+            }
+        } else if (config.appearance.autoHideF3 && client.getDebugOverlay().showDebugScreen()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static float getOverlayFadeAlpha() {
+        return config != null && config.autoHide != null
+                ? PerformanceTracker.getInstance().getFadeAlpha(config.autoHide)
+                : 1.0f;
     }
 
     public static void onClientTick(Minecraft client) {

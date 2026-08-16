@@ -35,7 +35,16 @@ public class OverlayRenderer {
 
         PerformanceTracker tracker = PerformanceTracker.getInstance();
 
-        if (config.appearance.autoHideF3 && client.getDebugOverlay().showDebugScreen()) {
+        if (config.autoHide != null) {
+            if (config.autoHide.hideWithF3 && client.getDebugOverlay().showDebugScreen()) {
+                return;
+            }
+        } else if (config.appearance.autoHideF3 && client.getDebugOverlay().showDebugScreen()) {
+            return;
+        }
+
+        float fadeAlpha = FpsOverlayMod.getOverlayFadeAlpha();
+        if (fadeAlpha <= 0.001f) {
             return;
         }
 
@@ -45,7 +54,7 @@ public class OverlayRenderer {
         }
 
         float scale = config.appearance.hudScale;
-        applyScale(context, scale, () -> renderScaled(context, client, config, lines, false));
+        applyScale(context, scale, () -> renderScaled(context, client, config, lines, false, fadeAlpha));
     }
 
     public static void renderPreview(GuiGraphicsExtractor context, Minecraft client, ModConfig previewConfig, int screenWidth,
@@ -56,7 +65,7 @@ public class OverlayRenderer {
 
         List<OverlayLine> lines = prepareLines(previewConfig, PerformanceTracker.getInstance(), true);
         float scale = previewConfig.appearance.hudScale;
-        applyScale(context, scale, () -> renderScaled(context, client, previewConfig, lines, true));
+        applyScale(context, scale, () -> renderScaled(context, client, previewConfig, lines, true, 1.0f));
     }
 
     public static LayoutBounds getPreviewBounds(int screenWidth, int screenHeight, ModConfig previewConfig) {
@@ -98,14 +107,17 @@ public class OverlayRenderer {
 
     private static LayoutBounds getPreviewLogicalBounds(int screenWidth, int screenHeight, ModConfig previewConfig,
             Font renderer, List<OverlayLine> lines) {
-        float scale = previewConfig.appearance.hudScale;
-        int logicalWidth = Math.max(1, Math.round(screenWidth / scale));
-        int logicalHeight = Math.max(1, Math.round(screenHeight / scale));
-        return measureBounds(renderer, previewConfig, lines, logicalWidth, logicalHeight);
+        if (renderer == null) {
+            AnchorPoint fallbackAnchor = getAnchorPoint(screenWidth, screenHeight, 160, 48, previewConfig.appearance.position);
+            return new LayoutBounds(fallbackAnchor.x() + previewConfig.appearance.xOffset,
+                    fallbackAnchor.y() + previewConfig.appearance.yOffset, 160, 48);
+        }
+
+        return measureBounds(renderer, previewConfig, lines, screenWidth, screenHeight);
     }
 
     private static void renderScaled(GuiGraphicsExtractor context, Minecraft client, ModConfig activeConfig,
-            List<OverlayLine> lines, boolean preview) {
+            List<OverlayLine> lines, boolean preview, float alphaMultiplier) {
         Font renderer = client != null ? client.font : null;
         if (renderer == null) {
             return;
@@ -117,24 +129,24 @@ public class OverlayRenderer {
         LayoutBounds bounds = layout.bounds();
 
         if (activeConfig.appearance.showBackground) {
-            drawRoundedRect(context, bounds.x(), bounds.y(), bounds.width(), bounds.height(), 4,
-                    getBackgroundColor(activeConfig));
+            int bgColor = applyAlpha(getBackgroundColor(activeConfig), alphaMultiplier);
+            drawRoundedRect(context, bounds.x(), bounds.y(), bounds.width(), bounds.height(), 4, bgColor);
         }
 
         if (activeConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
-            renderNavbar(context, renderer, activeConfig, layout.navbarRows(), bounds);
+            renderNavbar(context, renderer, activeConfig, layout.navbarRows(), bounds, alphaMultiplier);
         } else {
-            renderVertical(context, renderer, activeConfig, lines, bounds);
+            renderVertical(context, renderer, activeConfig, lines, bounds, alphaMultiplier);
         }
 
         if (activeConfig.hud.showGraph) {
             int[] graphValues = preview ? getPreviewGraphValues() : PerformanceTracker.getInstance().copyGraphValues();
-            renderGraph(context, activeConfig, bounds, graphValues);
+            renderGraph(context, activeConfig, bounds, graphValues, alphaMultiplier);
         }
     }
 
     private static void renderNavbar(GuiGraphicsExtractor context, Font renderer, ModConfig activeConfig,
-            List<NavbarRow> rows, LayoutBounds bounds) {
+            List<NavbarRow> rows, LayoutBounds bounds, float alphaMultiplier) {
         int padding = 6;
         int lineHeight = renderer.lineHeight + 2;
 
@@ -146,24 +158,24 @@ public class OverlayRenderer {
             for (int i = 0; i < row.lines().size(); i++) {
                 OverlayLine line = row.lines().get(i);
                 if (activeConfig.hud.showLabels && !line.label().isEmpty()) {
-                    drawStyledText(context, renderer, activeConfig, line.label(), currentX, textY, getLabelColor(activeConfig));
+                    drawStyledText(context, renderer, activeConfig, line.label(), currentX, textY, getLabelColor(activeConfig), alphaMultiplier);
                     currentX += renderer.width(line.label()) + 4;
                 }
 
                 drawStyledText(context, renderer, activeConfig, line.value(), currentX, textY,
-                        getAdaptiveColor(activeConfig, line));
+                        getAdaptiveColor(activeConfig, line), alphaMultiplier);
                 currentX += renderer.width(line.value());
 
                 if (!line.unit().isEmpty()) {
                     currentX += 3;
                     drawStyledText(context, renderer, activeConfig, line.unit(), currentX, textY,
-                            getUnitColor(activeConfig));
+                            getUnitColor(activeConfig), alphaMultiplier);
                     currentX += renderer.width(line.unit());
                 }
 
                 if (i < row.lines().size() - 1) {
                     currentX += 6;
-                    drawStyledText(context, renderer, activeConfig, "|", currentX, textY, getDividerColor(activeConfig));
+                    drawStyledText(context, renderer, activeConfig, "|", currentX, textY, getDividerColor(activeConfig), alphaMultiplier);
                     currentX += renderer.width("|") + 6;
                 }
             }
@@ -171,7 +183,7 @@ public class OverlayRenderer {
     }
 
     private static void renderVertical(GuiGraphicsExtractor context, Font renderer, ModConfig activeConfig,
-            List<OverlayLine> lines, LayoutBounds bounds) {
+            List<OverlayLine> lines, LayoutBounds bounds, float alphaMultiplier) {
         int padding = 6;
         int lineHeight = renderer.lineHeight + 2;
         int currentY = bounds.y() + padding;
@@ -179,24 +191,24 @@ public class OverlayRenderer {
         for (OverlayLine line : lines) {
             int currentX = bounds.x() + padding;
             if (activeConfig.hud.showLabels && !line.label().isEmpty()) {
-                drawStyledText(context, renderer, activeConfig, line.label(), currentX, currentY, getLabelColor(activeConfig));
+                drawStyledText(context, renderer, activeConfig, line.label(), currentX, currentY, getLabelColor(activeConfig), alphaMultiplier);
                 currentX += renderer.width(line.label()) + 4;
             }
 
             drawStyledText(context, renderer, activeConfig, line.value(), currentX, currentY,
-                    getAdaptiveColor(activeConfig, line));
+                    getAdaptiveColor(activeConfig, line), alphaMultiplier);
             currentX += renderer.width(line.value());
 
             if (!line.unit().isEmpty()) {
                 currentX += 3;
-                drawStyledText(context, renderer, activeConfig, line.unit(), currentX, currentY, getUnitColor(activeConfig));
+                drawStyledText(context, renderer, activeConfig, line.unit(), currentX, currentY, getUnitColor(activeConfig), alphaMultiplier);
             }
 
             currentY += lineHeight;
         }
     }
 
-    private static void renderGraph(GuiGraphicsExtractor context, ModConfig activeConfig, LayoutBounds bounds, int[] values) {
+    private static void renderGraph(GuiGraphicsExtractor context, ModConfig activeConfig, LayoutBounds bounds, int[] values, float alphaMultiplier) {
         if (values.length < 2) {
             return;
         }
@@ -211,8 +223,8 @@ public class OverlayRenderer {
         int graphHeight = GRAPH_HEIGHT;
         int graphBottom = graphTop + graphHeight;
 
-        context.fill(graphLeft, graphTop, graphLeft + graphWidth, graphBottom, 0x18000000);
-        context.fill(graphLeft, graphTop, graphLeft + graphWidth, graphTop + 1, getDividerColor(activeConfig));
+        context.fill(graphLeft, graphTop, graphLeft + graphWidth, graphBottom, applyAlpha(0x18000000, alphaMultiplier));
+        context.fill(graphLeft, graphTop, graphLeft + graphWidth, graphTop + 1, applyAlpha(getDividerColor(activeConfig), alphaMultiplier));
 
         float targetMax = 60f;
         for (int value : values) {
@@ -220,7 +232,7 @@ public class OverlayRenderer {
         }
         smoothGraphMax += (targetMax - smoothGraphMax) * 0.1f;
 
-        int graphColor = getGoodColor(activeConfig);
+        int graphColor = applyAlpha(getGoodColor(activeConfig), alphaMultiplier);
         double step = (double) graphWidth / (values.length - 1);
         for (int i = 0; i < values.length; i++) {
             int barHeight = (int) Math.round((values[i] / (double) smoothGraphMax) * (graphHeight - 3));
@@ -418,24 +430,37 @@ public class OverlayRenderer {
     }
 
     private static void drawStyledText(GuiGraphicsExtractor context, Font renderer, ModConfig activeConfig, String text,
-            int x, int y, int color) {
+            int x, int y, int color, float alphaMultiplier) {
         if (text == null || text.isEmpty()) {
             return;
         }
 
+        int finalColor = applyAlpha(color, alphaMultiplier);
         ModConfig.TextEffect effect = activeConfig != null ? activeConfig.appearance.textEffect : ModConfig.TextEffect.NONE;
         switch (effect) {
-            case SHADOW -> context.text(renderer, text, x, y, color, true);
+            case SHADOW -> context.text(renderer, text, x, y, finalColor, true);
             case OUTLINE -> {
-                int outlineColor = 0xD0000000;
+                int outlineColor = applyAlpha(0xD0000000, alphaMultiplier);
                 context.text(renderer, text, x - 1, y, outlineColor, false);
                 context.text(renderer, text, x + 1, y, outlineColor, false);
                 context.text(renderer, text, x, y - 1, outlineColor, false);
                 context.text(renderer, text, x, y + 1, outlineColor, false);
-                context.text(renderer, text, x, y, color, false);
+                context.text(renderer, text, x, y, finalColor, false);
             }
-            case NONE -> context.text(renderer, text, x, y, color, false);
+            case NONE -> context.text(renderer, text, x, y, finalColor, false);
         }
+    }
+
+    private static int applyAlpha(int color, float multiplier) {
+        if (multiplier >= 1.0f) {
+            return color;
+        }
+        int alpha = (color >>> 24) & 0xFF;
+        if (alpha == 0 && (color & 0x00FFFFFF) != 0) {
+            alpha = 0xFF;
+        }
+        alpha = Math.max(0, Math.min(255, Math.round(alpha * multiplier)));
+        return (alpha << 24) | (color & 0x00FFFFFF);
     }
 
     private static int getAdaptiveColor(ModConfig activeConfig, OverlayLine line) {
