@@ -1,3 +1,6 @@
+## v5.6
+* Fixed ping showing 1ms on Hypixel SkyBlock, BedWars, and other game modes that use custom tab-list handling which leaves `PlayerInfo#getLatency()` permanently stuck at 1. The mod now detects this condition after 5 seconds and automatically switches to an active RTT measurement path: it sends a `ServerboundPingRequestPacket` every 2 seconds and reads the round-trip time directly from Minecraft's own debug overlay ping logger. Normal servers are unaffected. The fallback resets immediately on disconnect or server switch.
+
 ## v5.3.1
 * Fixed AVG FPS and 1% Low being capped by HUD framerate-limiting mods (e.g. Gnetum). Frame timing is now sampled from the core render loop instead of the HUD render callback, so it reflects true framerate regardless of HUD throttling settings from other mods.
 

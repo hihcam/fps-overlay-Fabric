@@ -26,20 +26,76 @@ public final class MetricProvider {
 
     // ── Ping ────────────────────────────────────────────────────
 
+    private static net.minecraft.client.multiplayer.ClientPacketListener lastHandler = null;
+    private static long stuckStartTime = 0L;
+    private static boolean useFallback = false;
+    private static long lastRequestTime = 0L;
+    private static int lastSampledPing = 0;
+
+    private static void resetFallbackState() {
+        stuckStartTime = 0L;
+        useFallback = false;
+        lastRequestTime = 0L;
+        lastSampledPing = 0;
+    }
+
     public static int fetchPing(Minecraft client) {
         var handler = client.getConnection();
         var player = client.player;
         if (handler == null || player == null) {
+            lastHandler = null;
+            resetFallbackState();
             return 0;
+        }
+
+        // Reset fallback state on server change / reconnect
+        if (handler != lastHandler) {
+            lastHandler = handler;
+            resetFallbackState();
         }
 
         try {
             var entry = handler.getPlayerInfo(player.getUUID());
-            return entry != null ? Math.max(0, entry.getLatency()) : 0;
+            int latency = entry != null ? Math.max(0, entry.getLatency()) : 0;
+
+            // Fallback detection: some servers (e.g. Hypixel SkyBlock, BedWars) leave
+            // PlayerInfo#getLatency() stuck at 1ms. If we see latency==1 on a remote
+            // server for more than 5 seconds, switch to active RTT measurement via
+            // ServerboundPingRequestPacket / debug overlay ping logger.
+            if (!client.isLocalServer() && latency == 1) {
+                if (stuckStartTime == 0L) {
+                    stuckStartTime = System.currentTimeMillis();
+                } else if (System.currentTimeMillis() - stuckStartTime > 5000L) {
+                    useFallback = true;
+                }
+            } else {
+                stuckStartTime = 0L;
+                useFallback = false;
+            }
+
+            if (useFallback) {
+                long now = System.currentTimeMillis();
+                if (now - lastRequestTime > 2000L) {
+                    lastRequestTime = now;
+                    handler.send(new net.minecraft.network.protocol.ping.ServerboundPingRequestPacket(net.minecraft.util.Util.getMillis()));
+                }
+
+                var debugOverlay = client.getDebugOverlay();
+                if (debugOverlay != null) {
+                    var pingLogger = debugOverlay.getPingLogger();
+                    if (pingLogger != null && pingLogger.size() > 0) {
+                        lastSampledPing = (int) pingLogger.get(pingLogger.size() - 1);
+                    }
+                }
+                return lastSampledPing > 0 ? lastSampledPing : latency;
+            }
+
+            return latency;
         } catch (Exception e) {
             return 0;
         }
     }
+
 
     // ── Tick (MSPT / TPS) ───────────────────────────────────────
 
