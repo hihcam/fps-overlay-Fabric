@@ -23,6 +23,7 @@
   "text.fps_overlay.profile_name": "Profile Name",
   "text.fps_overlay.profile_name_hint": "Enter a profile name",
   "text.fps_overlay.profile_name_prompt": "Save, rename, or overwrite a configuration profile.",
+  "text.fps_overlay.profile_name_exists": "A profile with this name already exists",
   "text.fps_overlay.profile_search": "Search Profiles",
   "text.fps_overlay.profile_search_hint": "Type to filter",
   "text.fps_overlay.profile_select_hint": "Select a saved profile to apply its configuration.",

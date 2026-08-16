@@ -347,7 +347,8 @@ public class ConfigScreenFactory {
                                 .action((screen, option) -> Minecraft.getInstance().setScreenAndShow(
                                         new ProfileNameScreen((Screen) screen,
                                                 Component.translatable("screen.fps_overlay.save_profile"),
-                                                config.selectedProfile,
+                                                "",
+                                                config.getProfileNames(),
                                                 name -> {
                                                     saveProfile(config, name);
                                                     Minecraft.getInstance().setScreenAndShow(createSettingsScreen(parent));
@@ -368,14 +369,19 @@ public class ConfigScreenFactory {
                                 .text(Component.translatable("button.fps_overlay.rename_profile"))
                                 .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.rename_profile")))
                                 .available(hasSelectedProfile(config))
-                                .action((screen, option) -> Minecraft.getInstance().setScreenAndShow(
-                                        new ProfileNameScreen((Screen) screen,
-                                                Component.translatable("screen.fps_overlay.rename_profile"),
-                                                config.selectedProfile,
-                                                name -> {
-                                                    renameProfile(config, name);
-                                                    Minecraft.getInstance().setScreenAndShow(createSettingsScreen(parent));
-                                                })))
+                                .action((screen, option) -> {
+                                    Set<String> disallowed = new java.util.HashSet<>(config.getProfileNames());
+                                    disallowed.remove(config.selectedProfile);
+                                    Minecraft.getInstance().setScreenAndShow(
+                                            new ProfileNameScreen((Screen) screen,
+                                                    Component.translatable("screen.fps_overlay.rename_profile"),
+                                                    config.selectedProfile,
+                                                    disallowed,
+                                                    name -> {
+                                                        renameProfile(config, name);
+                                                        Minecraft.getInstance().setScreenAndShow(createSettingsScreen(parent));
+                                                    }));
+                                })
                                 .build())
                         .option(ButtonOption.createBuilder()
                                 .name(Component.translatable("button.fps_overlay.delete_profile"))
@@ -412,7 +418,7 @@ public class ConfigScreenFactory {
     }
 
     private static void saveProfile(ModConfig config, String name) {
-        config.saveProfile(name, config, true);
+        config.saveProfile(name, config, false);
         ConfigManager.saveConfig();
     }
 

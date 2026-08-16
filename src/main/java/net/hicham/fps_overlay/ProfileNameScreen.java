@@ -6,20 +6,34 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.Collections;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public class ProfileNameScreen extends Screen {
+    private static final int TEXT_MUTED = 0xFFB7C6D1;
+    private static final int TEXT_ERROR = 0xFFFF5555;
+
     private final Screen parent;
     private final Consumer<String> onConfirm;
     private final String initialValue;
+    private final Set<String> disallowedNames;
     private EditBox nameBox;
     private Button confirmButton;
+    private Component statusMessage;
+    private int statusColor = TEXT_MUTED;
 
-    public ProfileNameScreen(Screen parent, Component title, String initialValue, Consumer<String> onConfirm) {
+    public ProfileNameScreen(Screen parent, Component title, String initialValue, Set<String> disallowedNames, Consumer<String> onConfirm) {
         super(title);
         this.parent = parent;
         this.initialValue = initialValue == null ? "" : initialValue;
+        this.disallowedNames = disallowedNames == null ? Collections.emptySet() : disallowedNames;
         this.onConfirm = onConfirm;
+        this.statusMessage = Component.translatable("text.fps_overlay.profile_name_prompt");
+    }
+
+    public ProfileNameScreen(Screen parent, Component title, String initialValue, Consumer<String> onConfirm) {
+        this(parent, title, initialValue, Collections.emptySet(), onConfirm);
     }
 
     @Override
@@ -72,8 +86,7 @@ public class ProfileNameScreen extends Screen {
         guiGraphics.fill(panelX + panelWidth - 1, panelY, panelX + panelWidth, panelY + panelHeight, border);
 
         guiGraphics.centeredText(font, title, this.width / 2, panelY + 10, 0xFFFFFFFF);
-        guiGraphics.centeredText(font, Component.translatable("text.fps_overlay.profile_name_prompt"),
-                this.width / 2, panelY + 24, 0xFFB7C6D1);
+        guiGraphics.centeredText(font, statusMessage, this.width / 2, panelY + 24, statusColor);
 
         super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
     }
@@ -86,8 +99,22 @@ public class ProfileNameScreen extends Screen {
     }
 
     private void updateConfirmState() {
-        if (confirmButton != null) {
-            confirmButton.active = nameBox != null && !nameBox.getValue().trim().isEmpty();
+        if (nameBox == null || confirmButton == null) {
+            return;
+        }
+        String trimmed = nameBox.getValue().trim();
+        if (trimmed.isEmpty()) {
+            confirmButton.active = false;
+            statusMessage = Component.translatable("text.fps_overlay.profile_name_prompt");
+            statusColor = TEXT_MUTED;
+        } else if (disallowedNames.contains(trimmed)) {
+            confirmButton.active = false;
+            statusMessage = Component.translatable("text.fps_overlay.profile_name_exists");
+            statusColor = TEXT_ERROR;
+        } else {
+            confirmButton.active = true;
+            statusMessage = Component.translatable("text.fps_overlay.profile_name_prompt");
+            statusColor = TEXT_MUTED;
         }
     }
 }
