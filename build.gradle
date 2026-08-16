@@ -60,3 +60,17 @@ processResources {
                "mod_sources": project.mod_sources
     }
 }
+
+tasks.register("frameSamplingTest", JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "net.hicham.fps_overlay.FrameTrackerSamplingTest"
+}
+
+tasks.named("test").configure {
+    failOnNoDiscoveredTests = false
+}
+
+tasks.named("check").configure {
+    dependsOn tasks.named("frameSamplingTest")
+}

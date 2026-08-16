@@ -18,7 +18,10 @@ public class FrameTracker {
     private int size = 0;
 
     public void recordFrame() {
-        long currentNano = System.nanoTime();
+        recordFrame(System.nanoTime());
+    }
+
+    public void recordFrame(long currentNano) {
         if (lastFrameTimeNano != 0) {
             long delta = currentNano - lastFrameTimeNano;
             currentFrameTimeMs = delta / 1_000_000.0;
