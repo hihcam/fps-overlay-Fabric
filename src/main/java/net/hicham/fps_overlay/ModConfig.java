@@ -64,12 +64,14 @@ public class ModConfig {
     public Appearance appearance = new Appearance();
     public Thresholds thresholds = new Thresholds();
     public AutoHideRules autoHide = new AutoHideRules();
+    public String selectedProfile = "Default";
+    public Map<String, ConfigProfile> configProfiles = new LinkedHashMap<>();
 
     public static class General {
         public boolean enabled = true;
         public boolean enableKeybindings = true;
         public int updateIntervalMs = 250;
-        public int configVersion = 8;
+        public int configVersion = 9;
     }
 
     public static class HUD {
@@ -229,6 +231,128 @@ public class ModConfig {
         public float fadeOpacity = 0.35f;
     }
 
+    public static class ConfigProfile {
+        public General general = new General();
+        public HUD hud = new HUD();
+        public Appearance appearance = new Appearance();
+        public Thresholds thresholds = new Thresholds();
+        public AutoHideRules autoHide = new AutoHideRules();
+
+        public void validate() {
+            if (general == null) general = new General();
+            if (hud == null) hud = new HUD();
+            if (appearance == null) appearance = new Appearance();
+            if (thresholds == null) thresholds = new Thresholds();
+            if (autoHide == null) autoHide = new AutoHideRules();
+        }
+    }
+
+    public Set<String> getProfileNames() {
+        return configProfiles != null ? configProfiles.keySet() : Set.of();
+    }
+
+    public void saveProfile(String name) {
+        saveProfile(name, this);
+    }
+
+    public void saveProfile(String name, ModConfig sourceConfig) {
+        String sanitizedName = sanitizeProfileName(name);
+        if (sanitizedName.isEmpty()) {
+            return;
+        }
+
+        if (configProfiles == null) {
+            configProfiles = new LinkedHashMap<>();
+        }
+
+        ConfigProfile profile = createProfileFrom(sourceConfig == null ? this : sourceConfig);
+        configProfiles.put(sanitizedName, profile);
+        selectedProfile = sanitizedName;
+    }
+
+    public void renameProfile(String oldName, String newName) {
+        String sanitizedOld = sanitizeProfileName(oldName);
+        String sanitizedNew = sanitizeProfileName(newName);
+        if (sanitizedOld.isEmpty() || sanitizedNew.isEmpty() || configProfiles == null || !configProfiles.containsKey(sanitizedOld)) {
+            return;
+        }
+
+        ConfigProfile profile = configProfiles.remove(sanitizedOld);
+        configProfiles.put(sanitizedNew, profile);
+        if (sanitizedOld.equals(selectedProfile)) {
+            selectedProfile = sanitizedNew;
+        }
+    }
+
+    public void deleteProfile(String name) {
+        String sanitizedName = sanitizeProfileName(name);
+        if (sanitizedName.isEmpty() || configProfiles == null) {
+            return;
+        }
+
+        configProfiles.remove(sanitizedName);
+        if (sanitizedName.equals(selectedProfile)) {
+            selectedProfile = configProfiles.containsKey("Default") ? "Default" : (configProfiles.isEmpty() ? "" : configProfiles.keySet().iterator().next());
+        }
+    }
+
+    public void applyProfile(String name) {
+        String sanitizedName = sanitizeProfileName(name);
+        if (configProfiles == null) {
+            selectedProfile = "";
+            return;
+        }
+
+        ConfigProfile profile = configProfiles.get(sanitizedName);
+        if (profile == null) {
+            selectedProfile = "";
+            return;
+        }
+
+        profile.validate();
+        general = copySection(profile.general, General.class);
+        hud = copySection(profile.hud, HUD.class);
+        appearance = copySection(profile.appearance, Appearance.class);
+        thresholds = copySection(profile.thresholds, Thresholds.class);
+        autoHide = copySection(profile.autoHide, AutoHideRules.class);
+        selectedProfile = sanitizedName;
+        validate();
+    }
+
+    public static ConfigProfile createProfileFrom(ModConfig sourceConfig) {
+        ConfigProfile profile = new ConfigProfile();
+        profile.general = copySection(sourceConfig.general, General.class);
+        profile.hud = copySection(sourceConfig.hud, HUD.class);
+        profile.appearance = copySection(sourceConfig.appearance, Appearance.class);
+        profile.thresholds = copySection(sourceConfig.thresholds, Thresholds.class);
+        profile.autoHide = copySection(sourceConfig.autoHide, AutoHideRules.class);
+        profile.validate();
+        return profile;
+    }
+
+    private static <T> T copySection(T source, Class<T> sectionClass) {
+        if (source == null) {
+            try {
+                return sectionClass.getDeclaredConstructor().newInstance();
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("Failed to instantiate config section " + sectionClass.getSimpleName(), e);
+            }
+        }
+        T copy = GSON.fromJson(GSON.toJson(source), sectionClass);
+        if (copy != null) {
+            return copy;
+        }
+        try {
+            return sectionClass.getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to copy config section " + sectionClass.getSimpleName(), e);
+        }
+    }
+
+    public static String sanitizeProfileName(String name) {
+        return name == null ? "" : name.trim();
+    }
+
     public void validate() {
         general.updateIntervalMs = Math.max(16, Math.min(1000, general.updateIntervalMs));
 
@@ -271,6 +395,28 @@ public class ModConfig {
         autoHide.fadeDelaySeconds = Math.max(1, Math.min(600, autoHide.fadeDelaySeconds));
         autoHide.fadeOpacity = Math.max(0.0f, Math.min(1.0f, autoHide.fadeOpacity));
         appearance.autoHideF3 = autoHide.hideWithF3;
+
+        if (selectedProfile == null) {
+            selectedProfile = "";
+        }
+        if (configProfiles == null) {
+            configProfiles = new LinkedHashMap<>();
+        }
+        Map<String, ConfigProfile> sanitizedProfiles = new LinkedHashMap<>();
+        for (Map.Entry<String, ConfigProfile> entry : configProfiles.entrySet()) {
+            String name = sanitizeProfileName(entry.getKey());
+            ConfigProfile profile = entry.getValue();
+            if (name.isEmpty() || profile == null) {
+                continue;
+            }
+            profile.validate();
+            sanitizedProfiles.put(name, profile);
+        }
+        configProfiles = sanitizedProfiles;
+        selectedProfile = sanitizeProfileName(selectedProfile);
+        if (!selectedProfile.isEmpty() && !configProfiles.containsKey(selectedProfile)) {
+            selectedProfile = configProfiles.containsKey("Default") ? "Default" : (configProfiles.isEmpty() ? "" : configProfiles.keySet().iterator().next());
+        }
 
         if (general.configVersion < 6) {
             // CPU and GPU metrics removed in v5.1
@@ -316,6 +462,9 @@ public class ModConfig {
         this.appearance = new Appearance();
         this.thresholds = new Thresholds();
         this.autoHide = new AutoHideRules();
+        this.selectedProfile = "Default";
+        this.configProfiles = new LinkedHashMap<>();
+        this.configProfiles.put("Default", createProfileFrom(this));
         validate();
     }
 
@@ -374,6 +523,20 @@ public class ModConfig {
                 this.autoHide.hideWithF3 = this.appearance.autoHideF3;
             }
             this.general.configVersion = 8;
+        }
+
+        if (this.general.configVersion < 9) {
+            LOGGER.info("Migrating config from version {} to 9", this.general.configVersion);
+            if (this.selectedProfile == null || this.selectedProfile.trim().isEmpty()) {
+                this.selectedProfile = "Default";
+            }
+            if (this.configProfiles == null) {
+                this.configProfiles = new LinkedHashMap<>();
+            }
+            if (!this.configProfiles.containsKey("Default")) {
+                this.configProfiles.put("Default", createProfileFrom(this));
+            }
+            this.general.configVersion = 9;
         }
     }
 

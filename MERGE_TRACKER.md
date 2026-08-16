@@ -11,7 +11,7 @@
 ## 0. Ground Rules (do not deviate without flagging it here first)
 
 1. **Directory structure:** Keep `main`'s current layout (root Fabric project + `neoforge/` subfolder). Do **not** adopt PR #4's `common/`/`fabric/`/`neoforge/` restructure.
-2. **Config versioning:** Increment sequentially from the current version (**6 → 7 → 8**, not jumping to PR #4's 17). Every schema change must include a `migrate()` step so existing user JSON configs don't break.
+2. **Config versioning:** Increment sequentially from the current version (**6 → 7 → 8 → 9**, not jumping to PR #4's 17). Every schema change must include a `migrate()` step so existing user JSON configs don't break.
 3. **Two features are extensions, not ports** — do not copy PR #4's implementation wholesale for these:
    - **Threshold Coloring** — main already has color config (`goodColor`/`warningColor`/`badColor`). The task is to make the *existing hardcoded numeric cutoffs* in `OverlayRenderer.java` (~lines 446–460) configurable and expose them in the YACL screen — not rebuild coloring from scratch.
    - **Auto-Hide Rules** — main already has `autoHideF3` (boolean, in `ModConfig.Appearance`). The task is to fold this into a new `AutoHideRules` structure alongside chat/inventory/screenshot/idle-fade detection, without breaking existing users' saved `autoHideF3` setting.
@@ -26,9 +26,7 @@
 1. **Frame Sampling Tests** — isolated, no config schema impact, safest starting point.
 2. **Threshold Coloring** — extends existing color system, self-contained.
 3. **Auto-Hide Rules** — extends existing `autoHideF3`, touches `OverlayRenderer` alpha blending.
-4. **Profile System** — last. It needs to serialize Thresholds + AutoHideRules, so doing it last avoids a second config migration pass.
-
-Do not start a feature out of order without a note here explaining why.
+4. **Profile System** — last. Serializes Thresholds + AutoHideRules + General + HUD + Appearance in a single snapshot without duplicate migration passes.
 
 ---
 
@@ -69,10 +67,10 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - **Bugs found:** None.
 
 ### Profile System
-- **Status:** Not started
-- **Files (PR #4):** `ModConfig.java` (`ConfigProfile`), `ConfigHubScreen.java`, new `ProfileNameScreen.java`, new `ProfileSelectScreen.java`, `en_us.json`
-- **Adaptation needed:** Serialize main's actual config fields (General/HUD/Appearance + Thresholds + AutoHideRules).
-- **Bugs found:** —
+- **Status:** Done
+- **Files:** `src/main/java/net/hicham/fps_overlay/ModConfig.java`, `src/main/java/net/hicham/fps_overlay/ProfileNameScreen.java`, `src/main/java/net/hicham/fps_overlay/ProfileSelectScreen.java`, `src/main/java/net/hicham/fps_overlay/ConfigScreenFactory.java`, `src/main/resources/assets/fps_overlay/lang/en_us.json`
+- **Adaptation details:** Implemented `ModConfig.ConfigProfile` encapsulating snapshots of `General`, `HUD`, `Appearance`, `Thresholds`, and `AutoHideRules`. Profile deep-copying is performed via `ModConfig.GSON` round-trip JSON cloning, guaranteeing zero shared object references between active settings and profile snapshots. Added `saveProfile()`, `applyProfile()`, `deleteProfile()`, `renameProfile()`, and name sanitization. Implemented `configVersion` 8 → 9 migration initializing `"Default"` profile from current user settings. Created `ProfileNameScreen` (modal with input validation) and `ProfileSelectScreen` (scrollable search list with live selection highlight). Wired "Profiles" category into `ConfigScreenFactory` with action buttons (Save, Update, Rename, Delete, Select).
+- **Bugs found:** None.
 
 ---
 
@@ -86,6 +84,8 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - **Standalone Test Runner vs Gradle Loom:** The Gradle `frameSamplingTest` task is configured and wired to `check`, but executing it via `./gradlew` triggers Gradle/Loom multi-project dependency resolution requiring online Maven metadata fetching. Under offline/zero-bandwidth constraints, running the compiled test suite directly via local JDK 25 (`javac` + `java`) provides deterministic verification with 0 bytes downloaded.
 - **YACL Cross-Field Threshold Ordering Validation:** YACL 3.9.4 uses static range builders for UI sliders, meaning real-time dynamic range cross-coupling (e.g. dynamically lowering Slider B's maximum while dragging Slider A on the same open screen) is not reactive within the UI builder. Full cross-field boundary constraints (e.g. `warning <= good` for FPS/TPS, `warning >= good` for latency/frame time/memory) are strictly sanitized and enforced in `ModConfig.validate()` on configuration save and load.
 - **Appearance.autoHideF3 Field Preservation:** `appearance.autoHideF3` was kept synchronized with `autoHide.hideWithF3` in `ModConfig.validate()` and migrated in v8 migration so third-party references or older saves remain fully backward compatible.
+- **Config-Screen Suppression in `shouldRenderOverlay()`:** Ported from PR #4, outside original Feature 3 brief, approved retroactively. Suppresses HUD rendering when `ConfigHubScreen`, `PositionEditorScreen`, `MetricOrderScreen`, `KeybindSettingsScreen`, or YACL config screens are open.
+- **Profile Deep-Copy Parity:** Profile serialization uses `ModConfig.GSON` (the exact `Gson` instance configured with pretty printing used across `ConfigManager`), ensuring total serialization consistency with disk JSON.
 
 ---
 
@@ -159,4 +159,19 @@ Not part of PR #4 — flagged so it isn't confused with merge work or silently o
 - What's left:
   1. Feature 4: Profile System.
 - Bugs/deviations found: None.
-- Anything logged to Open Questions: Documented `Appearance.autoHideF3` backward-compatibility synchronization.
+- Anything logged to Open Questions: Documented `Appearance.autoHideF3` backward-compatibility synchronization and screen suppression in `shouldRenderOverlay()`.
+
+**2026-08-16 — Gemini — Feature 4: Profile System**
+- What was done:
+  1. Added `ModConfig.ConfigProfile` containing complete configuration section snapshots (`General`, `HUD`, `Appearance`, `Thresholds`, `AutoHideRules`).
+  2. Implemented deep copying using `ModConfig.GSON` round-trip JSON serialization.
+  3. Added profile management methods to `ModConfig`: `saveProfile()`, `applyProfile()`, `deleteProfile()`, `renameProfile()`, and name validation.
+  4. Implemented sequential config migration `configVersion` 8 → 9 capturing existing user settings as the `"Default"` profile.
+  5. Created `ProfileNameScreen.java` for profile naming/renaming with real-time text validation.
+  6. Created `ProfileSelectScreen.java` with instant search filtering, scroll clamping, and active profile indicator.
+  7. Added "Profiles" category to `ConfigScreenFactory.java` with action buttons (Save, Update, Rename, Delete, Select).
+  8. Added all profile management localization keys to `en_us.json`.
+  9. Verified test suite continues to pass under JDK 25.
+- What's left: All 4 PR #4 features are complete!
+- Bugs/deviations found: None.
+- Anything logged to Open Questions: Documented `ModConfig.GSON` deep-copy parity.

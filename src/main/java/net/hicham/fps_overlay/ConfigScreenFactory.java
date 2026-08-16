@@ -157,6 +157,7 @@ public class ConfigScreenFactory {
                                         .build())
                                 .build())
                         .build())
+                .category(buildProfileCategory(parent, config))
                 .category(buildAutoHideCategory(config, defaults))
                 .category(buildThresholdCategory(config, defaults))
                 .category(ConfigCategory.createBuilder()
@@ -330,5 +331,120 @@ public class ConfigScreenFactory {
                 .controller(builder -> ColorControllerBuilder.create(builder)
                         .allowAlpha(true))
                 .build();
+    }
+
+    private static final String NO_PROFILE_VALUE = "(No Profile)";
+
+    private static ConfigCategory buildProfileCategory(Screen parent, ModConfig config) {
+        return ConfigCategory.createBuilder()
+                .name(Component.translatable("category.fps_overlay.profiles"))
+                .group(OptionGroup.createBuilder()
+                        .name(Component.translatable("group.fps_overlay.profiles.actions"))
+                        .option(ButtonOption.createBuilder()
+                                .name(Component.translatable("button.fps_overlay.save_profile"))
+                                .text(Component.translatable("button.fps_overlay.save_profile"))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.save_profile")))
+                                .action((screen, option) -> Minecraft.getInstance().setScreenAndShow(
+                                        new ProfileNameScreen((Screen) screen,
+                                                Component.translatable("screen.fps_overlay.save_profile"),
+                                                config.selectedProfile,
+                                                name -> {
+                                                    saveProfile(config, name);
+                                                    Minecraft.getInstance().setScreenAndShow(createSettingsScreen(parent));
+                                                })))
+                                .build())
+                        .option(ButtonOption.createBuilder()
+                                .name(Component.translatable("button.fps_overlay.update_profile"))
+                                .text(Component.translatable("button.fps_overlay.update_profile"))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.update_profile")))
+                                .available(hasSelectedProfile(config))
+                                .action((screen, option) -> {
+                                    updateSelectedProfile(config);
+                                    Minecraft.getInstance().setScreenAndShow(createSettingsScreen(parent));
+                                })
+                                .build())
+                        .option(ButtonOption.createBuilder()
+                                .name(Component.translatable("button.fps_overlay.rename_profile"))
+                                .text(Component.translatable("button.fps_overlay.rename_profile"))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.rename_profile")))
+                                .available(hasSelectedProfile(config))
+                                .action((screen, option) -> Minecraft.getInstance().setScreenAndShow(
+                                        new ProfileNameScreen((Screen) screen,
+                                                Component.translatable("screen.fps_overlay.rename_profile"),
+                                                config.selectedProfile,
+                                                name -> {
+                                                    renameProfile(config, name);
+                                                    Minecraft.getInstance().setScreenAndShow(createSettingsScreen(parent));
+                                                })))
+                                .build())
+                        .option(ButtonOption.createBuilder()
+                                .name(Component.translatable("button.fps_overlay.delete_profile"))
+                                .text(Component.translatable("button.fps_overlay.delete_profile"))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.delete_profile")))
+                                .available(hasSelectedProfile(config))
+                                .action((screen, option) -> {
+                                    deleteProfile(config);
+                                    Minecraft.getInstance().setScreenAndShow(createSettingsScreen(parent));
+                                })
+                                .build())
+                        .build())
+                .group(OptionGroup.createBuilder()
+                        .name(Component.translatable("group.fps_overlay.profiles.available"))
+                        .option(ButtonOption.createBuilder()
+                                .name(Component.translatable("option.fps_overlay.configProfile"))
+                                .text(Component.literal(getProfileSelectionValue(config)))
+                                .description(OptionDescription.of(Component.translatable("tooltip.fps_overlay.configProfile")))
+                                .action((screen, option) -> Minecraft.getInstance().setScreenAndShow(
+                                        new ProfileSelectScreen((Screen) screen, config,
+                                                profileName -> {
+                                                    selectProfile(config, profileName);
+                                                    Minecraft.getInstance().setScreenAndShow(createSettingsScreen(parent));
+                                                })))
+                                .build())
+                        .build())
+                .build();
+    }
+
+    private static boolean hasSelectedProfile(ModConfig config) {
+        return config.selectedProfile != null
+                && !config.selectedProfile.isBlank()
+                && config.configProfiles.containsKey(config.selectedProfile);
+    }
+
+    private static void saveProfile(ModConfig config, String name) {
+        config.saveProfile(name);
+        ConfigManager.saveConfig();
+    }
+
+    private static void updateSelectedProfile(ModConfig config) {
+        if (!hasSelectedProfile(config)) {
+            return;
+        }
+        config.saveProfile(config.selectedProfile);
+        ConfigManager.saveConfig();
+    }
+
+    private static void renameProfile(ModConfig config, String newName) {
+        config.renameProfile(config.selectedProfile, newName);
+        ConfigManager.saveConfig();
+    }
+
+    private static void deleteProfile(ModConfig config) {
+        config.deleteProfile(config.selectedProfile);
+        ConfigManager.saveConfig();
+    }
+
+    private static void selectProfile(ModConfig config, String profileName) {
+        if (NO_PROFILE_VALUE.equals(profileName) || profileName == null || profileName.isEmpty()) {
+            config.selectedProfile = "";
+            ConfigManager.saveConfig();
+            return;
+        }
+        config.applyProfile(profileName);
+        ConfigManager.saveConfig();
+    }
+
+    private static String getProfileSelectionValue(ModConfig config) {
+        return hasSelectedProfile(config) ? config.selectedProfile : NO_PROFILE_VALUE;
     }
 }
