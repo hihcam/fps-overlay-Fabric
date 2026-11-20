@@ -7,10 +7,10 @@ import java.util.List;
 import java.util.Set;
 
 public enum OverlayMetric {
-    FPS("fps", "text.fps_overlay.fps_short", "text.fps_overlay.fps", "text.fps_overlay.fps"),
-    AVG_FPS("avg_fps", "text.fps_overlay.avg_fps_short", "text.fps_overlay.avg_fps", "text.fps_overlay.avg_unit"),
+    FPS("fps", "text.fps_overlay.fps_short", "text.fps_overlay.fps", "text.fps_overlay.fps_unit"),
+    AVG_FPS("avg_fps", "text.fps_overlay.avg_fps_short", "text.fps_overlay.avg_fps", "text.fps_overlay.fps_unit", "text.fps_overlay.avg_unit"),
     FRAME_TIME("frame_time", "text.fps_overlay.frame_time_short", "text.fps_overlay.frame_time", "text.fps_overlay.ms"),
-    LOW_1("one_percent_low", "text.fps_overlay.1percent_low_short", "text.fps_overlay.1percent_low", "text.fps_overlay.low_unit"),
+    LOW_1("one_percent_low", "text.fps_overlay.1percent_low_short", "text.fps_overlay.1percent_low", "text.fps_overlay.fps_unit", "text.fps_overlay.low_unit"),
     MEMORY("memory", "text.fps_overlay.memory_short", "text.fps_overlay.memory", "text.fps_overlay.gb"),
     PING("ping", "text.fps_overlay.ping_short", "text.fps_overlay.ping", "text.fps_overlay.ms"),
     MSPT("mspt", "text.fps_overlay.mspt_short", "text.fps_overlay.mspt", "text.fps_overlay.ms"),
@@ -23,12 +23,18 @@ public enum OverlayMetric {
     private final String labelKey;
     private final String displayNameKey;
     private final String unitKey;
+    private final String compactUnitKey;
 
     OverlayMetric(String id, String labelKey, String displayNameKey, String unitKey) {
+        this(id, labelKey, displayNameKey, unitKey, unitKey);
+    }
+
+    OverlayMetric(String id, String labelKey, String displayNameKey, String unitKey, String compactUnitKey) {
         this.id = id;
         this.labelKey = labelKey;
         this.displayNameKey = displayNameKey;
         this.unitKey = unitKey;
+        this.compactUnitKey = compactUnitKey;
     }
 
     public String getId() {
@@ -45,6 +51,10 @@ public enum OverlayMetric {
 
     public String getUnitKey() {
         return unitKey;
+    }
+
+    public String getUnitKey(boolean showLabels) {
+        return showLabels ? unitKey : compactUnitKey;
     }
 
     public static OverlayMetric fromId(String id) {

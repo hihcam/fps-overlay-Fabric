@@ -65,11 +65,13 @@ public class FpsOverlayMod {
             return false;
         }
 
-        Screen screen = client.screen;
+        Screen screen = client.gui.screen();
         if (screen instanceof ConfigHubScreen
                 || screen instanceof PositionEditorScreen
                 || screen instanceof MetricOrderScreen
                 || screen instanceof KeybindSettingsScreen
+                || screen instanceof ProfileNameScreen
+                || screen instanceof ProfileSelectScreen
                 || (screen != null && screen.getClass().getName().startsWith("dev.isxander.yacl3"))) {
             return false;
         }

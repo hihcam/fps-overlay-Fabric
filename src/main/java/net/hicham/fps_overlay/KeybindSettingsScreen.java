@@ -8,7 +8,6 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.ChatFormatting;
 import com.mojang.blaze3d.platform.InputConstants;
-import org.lwjgl.glfw.GLFW;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.KeyEvent;
 
@@ -64,8 +63,8 @@ public class KeybindSettingsScreen extends Screen {
     public boolean keyPressed(KeyEvent event) {
         if (this.capturedEntry != null) {
             KeyMapping keyMapping = this.capturedEntry.getKeyMapping();
-            if (event.key() != GLFW.GLFW_KEY_ESCAPE) {
-                InputConstants.Key newKey = InputConstants.Type.KEYSYM.getOrCreate(event.key());
+            if (!event.isEscape()) {
+                InputConstants.Key newKey = InputConstants.getKey(event);
                 keyMapping.setKey(newKey);
                 KeyMapping.resetMapping();
                 this.minecraft.options.save();

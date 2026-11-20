@@ -18,6 +18,8 @@ public class OverlayRenderer {
     private static final ThreadLocal<DecimalFormat> WHOLE_NUMBER =
             ThreadLocal.withInitial(() -> new DecimalFormat("0"));
     private static final int GRAPH_HEIGHT = 24;
+    private static final int VERTICAL_LABEL_GAP = 10;
+    private static final int VERTICAL_UNIT_GAP = 3;
     private static float smoothGraphMax = 60f;
 
     public static void resetGraphScale() {
@@ -66,6 +68,92 @@ public class OverlayRenderer {
         List<OverlayLine> lines = prepareLines(previewConfig, PerformanceTracker.getInstance(), true);
         float scale = previewConfig.appearance.hudScale;
         applyScale(context, scale, () -> renderScaled(context, client, previewConfig, lines, true, 1.0f));
+    }
+
+    public static void renderPreviewCard(GuiGraphicsExtractor context, Minecraft client, ModConfig previewConfig,
+            int boxX, int boxY, int boxWidth, int boxHeight) {
+        if (previewConfig == null) {
+            return;
+        }
+        Font renderer = client != null ? client.font : null;
+        if (renderer == null) {
+            return;
+        }
+
+        List<OverlayLine> lines = prepareLines(previewConfig, PerformanceTracker.getInstance(), true);
+        if (lines.isEmpty() && !previewConfig.hud.showGraph) {
+            return;
+        }
+
+        int padding = 6;
+        int maxInnerWidth = Math.max(40, boxWidth - 16);
+        int textWidth = 0;
+        int lineHeight = renderer.lineHeight + 2;
+        int lineCount = lines.size();
+        List<NavbarRow> navbarRows = List.of();
+        VerticalColumns verticalColumns = VerticalColumns.EMPTY;
+
+        if (previewConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
+            int maxContentWidth = Math.max(40, maxInnerWidth - (padding * 2));
+            navbarRows = layoutNavbarRows(renderer, lines, maxContentWidth, previewConfig);
+            lineCount = Math.max(1, navbarRows.size());
+            for (NavbarRow row : navbarRows) {
+                textWidth = Math.max(textWidth, row.width());
+            }
+        } else {
+            verticalColumns = measureVerticalColumns(renderer, lines, previewConfig);
+            textWidth = verticalColumns.contentWidth();
+        }
+
+        int graphHeight = previewConfig.hud.showGraph ? GRAPH_HEIGHT + 6 : 0;
+        int contentWidth = Math.max(textWidth, previewConfig.hud.showGraph ? 120 : 0);
+        int width = contentWidth + (padding * 2);
+        int contentHeight = previewConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR
+                ? (lineHeight * Math.max(1, lineCount))
+                : (lineCount > 0 ? (lineHeight * Math.max(1, lineCount)) : lineHeight);
+        int height = contentHeight + (padding * 2) + graphHeight;
+
+        float hudScale = previewConfig.appearance.hudScale;
+        float scaledW = width * hudScale;
+        float scaledH = height * hudScale;
+
+        float fitScale = 1.0f;
+        if (scaledW > boxWidth - 12) {
+            fitScale = Math.min(fitScale, (boxWidth - 12) / scaledW);
+        }
+        if (scaledH > boxHeight - 12) {
+            fitScale = Math.min(fitScale, (boxHeight - 12) / scaledH);
+        }
+        float effectiveScale = hudScale * fitScale;
+
+        int finalW = (int) (width * effectiveScale);
+        int finalH = (int) (height * effectiveScale);
+        int screenX = boxX + (boxWidth - finalW) / 2;
+        int screenY = boxY + (boxHeight - finalH) / 2;
+
+        int logicalX = (int) Math.round(screenX / effectiveScale);
+        int logicalY = (int) Math.round(screenY / effectiveScale);
+        LayoutBounds bounds = new LayoutBounds(logicalX, logicalY, width, height);
+
+        final List<NavbarRow> finalNavbarRows = navbarRows;
+        final VerticalColumns finalVerticalColumns = verticalColumns;
+        applyScale(context, effectiveScale, () -> {
+            if (previewConfig.appearance.showBackground) {
+                int bgColor = getBackgroundColor(previewConfig);
+                drawRoundedRect(context, bounds.x(), bounds.y(), bounds.width(), bounds.height(), 4, bgColor);
+            }
+
+            if (previewConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
+                renderNavbar(context, renderer, previewConfig, finalNavbarRows, bounds, 1.0f);
+            } else {
+                renderVertical(context, renderer, previewConfig, lines, bounds, finalVerticalColumns, 1.0f);
+            }
+
+            if (previewConfig.hud.showGraph) {
+                int[] graphValues = getPreviewGraphValues();
+                renderGraph(context, previewConfig, bounds, graphValues, 1.0f);
+            }
+        });
     }
 
     public static LayoutBounds getPreviewBounds(int screenWidth, int screenHeight, ModConfig previewConfig) {
@@ -136,7 +224,7 @@ public class OverlayRenderer {
         if (activeConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
             renderNavbar(context, renderer, activeConfig, layout.navbarRows(), bounds, alphaMultiplier);
         } else {
-            renderVertical(context, renderer, activeConfig, lines, bounds, alphaMultiplier);
+            renderVertical(context, renderer, activeConfig, lines, bounds, layout.verticalColumns(), alphaMultiplier);
         }
 
         if (activeConfig.hud.showGraph) {
@@ -183,25 +271,30 @@ public class OverlayRenderer {
     }
 
     private static void renderVertical(GuiGraphicsExtractor context, Font renderer, ModConfig activeConfig,
-            List<OverlayLine> lines, LayoutBounds bounds, float alphaMultiplier) {
+            List<OverlayLine> lines, LayoutBounds bounds, VerticalColumns columns, float alphaMultiplier) {
         int padding = 6;
         int lineHeight = renderer.lineHeight + 2;
         int currentY = bounds.y() + padding;
+        int labelX = bounds.x() + padding;
+        int contentRightX = bounds.x() + bounds.width() - padding;
+        int unitLeftX = columns.unitWidth() > 0 ? contentRightX - columns.unitWidth() : contentRightX;
+        int valueWithUnitRightX = columns.unitWidth() > 0 ? unitLeftX - VERTICAL_UNIT_GAP : contentRightX;
 
         for (OverlayLine line : lines) {
-            int currentX = bounds.x() + padding;
             if (activeConfig.hud.showLabels && !line.label().isEmpty()) {
-                drawStyledText(context, renderer, activeConfig, line.label(), currentX, currentY, getLabelColor(activeConfig), alphaMultiplier);
-                currentX += renderer.width(line.label()) + 4;
+                drawStyledText(context, renderer, activeConfig, line.label(), labelX, currentY,
+                        getLabelColor(activeConfig), alphaMultiplier);
             }
 
-            drawStyledText(context, renderer, activeConfig, line.value(), currentX, currentY,
+            int valueWidth = renderer.width(line.value());
+            boolean hasUnit = !line.unit().isEmpty();
+            int valueX = (hasUnit ? valueWithUnitRightX : contentRightX) - valueWidth;
+            drawStyledText(context, renderer, activeConfig, line.value(), valueX, currentY,
                     getAdaptiveColor(activeConfig, line), alphaMultiplier);
-            currentX += renderer.width(line.value());
 
-            if (!line.unit().isEmpty()) {
-                currentX += 3;
-                drawStyledText(context, renderer, activeConfig, line.unit(), currentX, currentY, getUnitColor(activeConfig), alphaMultiplier);
+            if (hasUnit) {
+                drawStyledText(context, renderer, activeConfig, line.unit(), unitLeftX, currentY,
+                        getUnitColor(activeConfig), alphaMultiplier);
             }
 
             currentY += lineHeight;
@@ -261,7 +354,8 @@ public class OverlayRenderer {
             return new OverlayLayout(
                     new LayoutBounds(fallbackAnchor.x() + activeConfig.appearance.xOffset,
                             fallbackAnchor.y() + activeConfig.appearance.yOffset, 160, 48),
-                    List.of());
+                    List.of(),
+                    VerticalColumns.EMPTY);
         }
 
         int padding = 6;
@@ -269,6 +363,7 @@ public class OverlayRenderer {
         int lineHeight = renderer.lineHeight + 2;
         int lineCount = lines.size();
         List<NavbarRow> navbarRows = List.of();
+        VerticalColumns verticalColumns = VerticalColumns.EMPTY;
 
         if (activeConfig.appearance.overlayStyle == ModConfig.OverlayStyle.NAVBAR) {
             int maxContentWidth = Math.max(40, screenWidth - 8 - (padding * 2));
@@ -278,9 +373,8 @@ public class OverlayRenderer {
                 textWidth = Math.max(textWidth, row.width());
             }
         } else {
-            for (OverlayLine line : lines) {
-                textWidth = Math.max(textWidth, measureLineWidth(renderer, line, activeConfig));
-            }
+            verticalColumns = measureVerticalColumns(renderer, lines, activeConfig);
+            textWidth = verticalColumns.contentWidth();
         }
 
         int graphHeight = activeConfig.hud.showGraph ? GRAPH_HEIGHT + 6 : 0;
@@ -296,7 +390,7 @@ public class OverlayRenderer {
         int maxY = Math.max(0, screenHeight - height);
         int x = Math.max(0, Math.min(anchor.x() + activeConfig.appearance.xOffset, maxX));
         int y = Math.max(0, Math.min(anchor.y() + activeConfig.appearance.yOffset, maxY));
-        return new OverlayLayout(new LayoutBounds(x, y, width, height), navbarRows);
+        return new OverlayLayout(new LayoutBounds(x, y, width, height), navbarRows, verticalColumns);
     }
 
     private static List<NavbarRow> layoutNavbarRows(Font renderer, List<OverlayLine> lines, int maxContentWidth, ModConfig activeConfig) {
@@ -331,6 +425,32 @@ public class OverlayRenderer {
         return rows;
     }
 
+    private static VerticalColumns measureVerticalColumns(Font renderer, List<OverlayLine> lines, ModConfig activeConfig) {
+        int maxLabelWidth = 0;
+        int maxValueWithUnitWidth = 0;
+        int maxValueWithoutUnitWidth = 0;
+        int maxUnitWidth = 0;
+
+        for (OverlayLine line : lines) {
+            if (activeConfig.hud.showLabels && !line.label().isEmpty()) {
+                maxLabelWidth = Math.max(maxLabelWidth, renderer.width(line.label()));
+            }
+
+            int valueWidth = renderer.width(line.value());
+            if (!line.unit().isEmpty()) {
+                maxValueWithUnitWidth = Math.max(maxValueWithUnitWidth, valueWidth);
+                maxUnitWidth = Math.max(maxUnitWidth, renderer.width(line.unit()));
+            } else {
+                maxValueWithoutUnitWidth = Math.max(maxValueWithoutUnitWidth, valueWidth);
+            }
+        }
+
+        int valueAndUnitWidth = maxValueWithUnitWidth + (maxUnitWidth > 0 ? VERTICAL_UNIT_GAP + maxUnitWidth : 0);
+        int rightColumnWidth = Math.max(valueAndUnitWidth, maxValueWithoutUnitWidth);
+        int contentWidth = (maxLabelWidth > 0 ? maxLabelWidth + VERTICAL_LABEL_GAP : 0) + rightColumnWidth;
+        return new VerticalColumns(maxUnitWidth, contentWidth);
+    }
+
     private static int measureLineWidth(Font renderer, OverlayLine line, ModConfig activeConfig) {
         int width = 0;
         if (activeConfig.hud.showLabels && !line.label().isEmpty()) {
@@ -360,35 +480,36 @@ public class OverlayRenderer {
 
     private static OverlayLine createLiveLine(ModConfig activeConfig, PerformanceTracker tracker, OverlayMetric metric) {
         String metricLabel = activeConfig.hud.getMetricDisplayName(metric);
+        String metricUnit = translated(metric.getUnitKey(activeConfig.hud.showLabels));
         return switch (metric) {
             case FPS -> new OverlayLine(metric, metricLabel,
                     withMinMax(activeConfig, tracker.getCurrentFps(), tracker.getMinFps(), tracker.getMaxFps()),
-                    translated(metric.getUnitKey()), (double) tracker.getCurrentFps());
+                    metricUnit, (double) tracker.getCurrentFps());
             case AVG_FPS -> new OverlayLine(metric, metricLabel,
-                    WHOLE_NUMBER.get().format(tracker.getAverageFps()), translated(metric.getUnitKey()),
+                    WHOLE_NUMBER.get().format(tracker.getAverageFps()), metricUnit,
                     tracker.getAverageFps());
             case FRAME_TIME -> new OverlayLine(metric, metricLabel,
-                    ONE_DECIMAL.get().format(tracker.getCurrentFrameTimeMs()), translated(metric.getUnitKey()),
+                    ONE_DECIMAL.get().format(tracker.getCurrentFrameTimeMs()), metricUnit,
                     tracker.getCurrentFrameTimeMs());
             case LOW_1 -> new OverlayLine(metric, metricLabel,
-                    String.valueOf(tracker.getOnePercentLow()), translated(metric.getUnitKey()),
+                    String.valueOf(tracker.getOnePercentLow()), metricUnit,
                     (double) tracker.getOnePercentLow());
-            case MEMORY -> new OverlayLine(metric, metricLabel,
-                    tracker.getMaxMemory() > 0
-                            ? ONE_DECIMAL.get().format(tracker.getUsedMemory() / (1024.0 * 1024.0 * 1024.0))
-                            : "N/A",
-                    translated(metric.getUnitKey()), tracker.getMaxMemory() > 0
-                            ? (tracker.getUsedMemory() * 100.0 / tracker.getMaxMemory())
-                            : null);
+            case MEMORY -> tracker.getMaxMemory() > 0
+                    ? new OverlayLine(metric, metricLabel,
+                            ONE_DECIMAL.get().format(tracker.getUsedMemory() / (1024.0 * 1024.0 * 1024.0)),
+                            metricUnit, tracker.getUsedMemory() * 100.0 / tracker.getMaxMemory())
+                    : new OverlayLine(metric, metricLabel, "N/A", "", null);
             case PING -> new OverlayLine(metric, metricLabel,
                     withMinMax(activeConfig, tracker.getCurrentPing(), tracker.getMinPing(), tracker.getMaxPing()),
-                    translated(metric.getUnitKey()), (double) tracker.getCurrentPing());
-            case MSPT -> new OverlayLine(metric, metricLabel,
-                    tracker.getMspt() >= 0 ? ONE_DECIMAL.get().format(tracker.getMspt()) : "N/A",
-                    translated(metric.getUnitKey()), tracker.getMspt());
-            case TPS -> new OverlayLine(metric, metricLabel,
-                    tracker.getTps() >= 0 ? ONE_DECIMAL.get().format(tracker.getTps()) : "N/A",
-                    translated(metric.getUnitKey()), tracker.getTps());
+                    metricUnit, (double) tracker.getCurrentPing());
+            case MSPT -> tracker.getMspt() >= 0
+                    ? new OverlayLine(metric, metricLabel, ONE_DECIMAL.get().format(tracker.getMspt()),
+                            metricUnit, tracker.getMspt())
+                    : new OverlayLine(metric, metricLabel, "N/A", "", null);
+            case TPS -> tracker.getTps() >= 0
+                    ? new OverlayLine(metric, metricLabel, ONE_DECIMAL.get().format(tracker.getTps()),
+                            metricUnit, tracker.getTps())
+                    : new OverlayLine(metric, metricLabel, "N/A", "", null);
             case CHUNKS -> new OverlayLine(metric, metricLabel,
                     tracker.getVisibleChunks() > 0
                             ? tracker.getCompletedChunks() + "/" + tracker.getVisibleChunks()
@@ -403,15 +524,16 @@ public class OverlayRenderer {
 
     private static OverlayLine createPreviewLine(ModConfig activeConfig, OverlayMetric metric) {
         String metricLabel = activeConfig.hud.getMetricDisplayName(metric);
+        String metricUnit = translated(metric.getUnitKey(activeConfig.hud.showLabels));
         return switch (metric) {
-            case FPS -> new OverlayLine(metric, metricLabel, "144", translated(metric.getUnitKey()), 144.0);
-            case AVG_FPS -> new OverlayLine(metric, metricLabel, "138", translated(metric.getUnitKey()), 138.0);
-            case FRAME_TIME -> new OverlayLine(metric, metricLabel, "6.9", translated(metric.getUnitKey()), 6.9);
-            case LOW_1 -> new OverlayLine(metric, metricLabel, "92", translated(metric.getUnitKey()), 92.0);
-            case MEMORY -> new OverlayLine(metric, metricLabel, "3.4", translated(metric.getUnitKey()), 58.0);
-            case PING -> new OverlayLine(metric, metricLabel, "42", translated(metric.getUnitKey()), 42.0);
-            case MSPT -> new OverlayLine(metric, metricLabel, "18.7", translated(metric.getUnitKey()), 18.7);
-            case TPS -> new OverlayLine(metric, metricLabel, "20.0", translated(metric.getUnitKey()), 20.0);
+            case FPS -> new OverlayLine(metric, metricLabel, "144", metricUnit, 144.0);
+            case AVG_FPS -> new OverlayLine(metric, metricLabel, "138", metricUnit, 138.0);
+            case FRAME_TIME -> new OverlayLine(metric, metricLabel, "6.9", metricUnit, 6.9);
+            case LOW_1 -> new OverlayLine(metric, metricLabel, "92", metricUnit, 92.0);
+            case MEMORY -> new OverlayLine(metric, metricLabel, "3.4", metricUnit, 58.0);
+            case PING -> new OverlayLine(metric, metricLabel, "42", metricUnit, 42.0);
+            case MSPT -> new OverlayLine(metric, metricLabel, "18.7", metricUnit, 18.7);
+            case TPS -> new OverlayLine(metric, metricLabel, "20.0", metricUnit, 20.0);
             case CHUNKS -> new OverlayLine(metric, metricLabel, "324/361", "", 90.0);
             case COORDS -> new OverlayLine(metric, metricLabel, "128 64 -52", "", null);
             case BIOME -> new OverlayLine(metric, metricLabel, "Plains", "", null);
@@ -566,7 +688,11 @@ public class OverlayRenderer {
     private record NavbarRow(List<OverlayLine> lines, int width) {
     }
 
-    private record OverlayLayout(LayoutBounds bounds, List<NavbarRow> navbarRows) {
+    private record VerticalColumns(int unitWidth, int contentWidth) {
+        private static final VerticalColumns EMPTY = new VerticalColumns(0, 0);
+    }
+
+    private record OverlayLayout(LayoutBounds bounds, List<NavbarRow> navbarRows, VerticalColumns verticalColumns) {
     }
 
     public record LayoutBounds(int x, int y, int width, int height) {

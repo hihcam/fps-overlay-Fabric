@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 
 import java.util.Collections;
@@ -59,6 +60,18 @@ public class ProfileNameScreen extends Screen {
                 .build());
 
         updateConfirmState();
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (super.keyPressed(event)) {
+            return true;
+        }
+        if (event.isConfirmation()) {
+            confirm();
+            return true;
+        }
+        return false;
     }
 
     @Override

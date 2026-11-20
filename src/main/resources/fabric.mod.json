@@ -29,7 +29,7 @@
     "fabricloader": ">=${fabric_loader_version}",
     "fabric-api": "*",
     "minecraft": "${minecraft_version}",
-    "yet_another_config_lib_v3": ">=3.8.1"
+    "yet_another_config_lib_v3": ">=3.9.7"
   },
   "suggests": {
     "modmenu": "*"

@@ -2,11 +2,13 @@ package net.hicham.fps_overlay;
 
 import dev.isxander.yacl3.api.*;
 import dev.isxander.yacl3.api.controller.*;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.awt.Color;
 import java.util.Locale;
+import java.util.Set;
 
 public class ConfigScreenFactory {
     public static Screen createConfigScreen(Screen parent) {

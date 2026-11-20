@@ -16,15 +16,14 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Mod(FpsOverlayMod.MOD_ID)
 public class FpsOverlayNeoForge {
-    private static final KeyMapping.Category KEY_CATEGORY = KeyMapping.Category
-            .register(Identifier.fromNamespaceAndPath(FpsOverlayMod.MOD_ID, "keys"));
+    private static final KeyMapping.Category KEY_CATEGORY = new KeyMapping.Category(
+            Identifier.fromNamespaceAndPath(FpsOverlayMod.MOD_ID, "keys"));
     private final List<KeyBindingAction> keyBindingActions = new ArrayList<>();
 
     public FpsOverlayNeoForge(IEventBus modEventBus, ModContainer modContainer) {
@@ -82,24 +81,24 @@ public class FpsOverlayNeoForge {
             return;
         }
 
-        registerKeyBinding("toggle_overlay", GLFW.GLFW_KEY_O, FpsOverlayMod::toggleOverlay);
-        registerKeyBinding("toggle_fps", GLFW.GLFW_KEY_F8, () -> FpsOverlayMod.toggleMetric(OverlayMetric.FPS));
-        registerKeyBinding("toggle_frame_time", GLFW.GLFW_KEY_F9,
+        registerKeyBinding("toggle_overlay", InputConstants.KEY_O, FpsOverlayMod::toggleOverlay);
+        registerKeyBinding("toggle_fps", InputConstants.KEY_F8, () -> FpsOverlayMod.toggleMetric(OverlayMetric.FPS));
+        registerKeyBinding("toggle_frame_time", InputConstants.KEY_F9,
                 () -> FpsOverlayMod.toggleMetric(OverlayMetric.FRAME_TIME));
-        registerKeyBinding("toggle_memory", GLFW.GLFW_KEY_F10, () -> FpsOverlayMod.toggleMetric(OverlayMetric.MEMORY));
-        registerKeyBinding("toggle_ping", GLFW.GLFW_KEY_F11, () -> FpsOverlayMod.toggleMetric(OverlayMetric.PING));
-        registerKeyBinding("toggle_coords", GLFW.GLFW_KEY_F7, () -> FpsOverlayMod.toggleMetric(OverlayMetric.COORDS));
-        registerKeyBinding("toggle_graph", GLFW.GLFW_KEY_F5, FpsOverlayMod::toggleGraph);
-        registerKeyBinding("open_config", GLFW.GLFW_KEY_P, () -> FpsOverlayMod.openConfig(Minecraft.getInstance()));
-        registerKeyBinding("open_position_editor", GLFW.GLFW_KEY_F6,
+        registerKeyBinding("toggle_memory", InputConstants.KEY_F10, () -> FpsOverlayMod.toggleMetric(OverlayMetric.MEMORY));
+        registerKeyBinding("toggle_ping", InputConstants.KEY_F11, () -> FpsOverlayMod.toggleMetric(OverlayMetric.PING));
+        registerKeyBinding("toggle_coords", InputConstants.KEY_F7, () -> FpsOverlayMod.toggleMetric(OverlayMetric.COORDS));
+        registerKeyBinding("toggle_graph", InputConstants.KEY_F5, FpsOverlayMod::toggleGraph);
+        registerKeyBinding("open_config", InputConstants.KEY_P, () -> FpsOverlayMod.openConfig(Minecraft.getInstance()));
+        registerKeyBinding("open_position_editor", InputConstants.KEY_F6,
                 () -> FpsOverlayMod.openPositionEditor(Minecraft.getInstance()));
-        registerKeyBinding("reset_stats", GLFW.GLFW_KEY_F4, FpsOverlayMod::resetStatistics);
+        registerKeyBinding("reset_stats", InputConstants.KEY_F4, FpsOverlayMod::resetStatistics);
     }
 
     private void registerKeyBinding(String id, int defaultKey, Runnable action) {
         KeyMapping binding = new KeyMapping(
                 "key.fps_overlay." + id,
-                InputConstants.Type.KEYSYM,
+                InputConstants.Type.KEYBOARD,
                 defaultKey,
                 KEY_CATEGORY);
         keyBindingActions.add(new KeyBindingAction(binding, action));
